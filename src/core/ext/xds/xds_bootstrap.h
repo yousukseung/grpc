@@ -39,12 +39,25 @@ namespace grpc_core {
 
 class XdsClient;
 
+class XdsChannelCredsFactory {
+ public:
+  virtual RefCountedPtr<grpc_channel_credentials> CreateXdsChannelCreds(
+      const Json& config) const = 0;
+  virtual ~XdsChannelCredsFactory() {}
+  virtual bool IsValidConfig(const Json& config) const = 0;
+  virtual const char* creds_type() const = 0;
+};
+
 class XdsChannelCredsRegistry {
  public:
   static bool IsSupported(const std::string& creds_type);
   static bool IsValidConfig(const std::string& creds_type, const Json& config);
   static RefCountedPtr<grpc_channel_credentials> MakeChannelCreds(
       const std::string& creds_type, const Json& config);
+  static void Init();
+  static void Shutdown();
+  static void RegisterXdsChannelCredsFactory(
+      std::unique_ptr<XdsChannelCredsFactory> factory);
 };
 
 class XdsBootstrap {
