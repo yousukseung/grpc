@@ -28,6 +28,7 @@
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 
+#include "include/grpc/grpc_security.h"
 #include "src/core/ext/xds/certificate_provider_registry.h"
 #include "src/core/ext/xds/xds_api.h"
 #include "src/core/lib/gpr/env.h"
@@ -98,39 +99,118 @@ grpc_error_handle ParseChannelCredsArray(const Json::Array& json,
                                        &error_list);
 }
 
+class XdsChannelCredsRegistryState {
+ public:
+  XdsChannelCredsRegistryState();
+  void RegisterXdsChannelCredsFactory(
+      std::unique_ptr<XdsChannelCredsFactory> factory) {
+    GPR_ASSERT(LookupXdsChannelCredsFactory(factory->creds_type()) == nullptr);
+    factories_.push_back(std::move(factory));
+  }
+
+  XdsChannelCredsFactory* LookupXdsChannelCredsFactory(
+      absl::string_view creds_type) const {
+    for (auto i = 0; i < factories_.size(); ++i) {
+      if (creds_type == factories_[i]->creds_type()) {
+        return factories_[i].get();
+      }
+    }
+    return nullptr;
+  }
+
+ private:
+  // Currently we expect a small number of creds factories to be registered.
+  // We may raise the default capacity or turn this into a map if we need to
+  // support more.
+  absl::InlinedVector<std::unique_ptr<XdsChannelCredsFactory>, 10> factories_;
+};
+
+static XdsChannelCredsRegistryState* g_state = nullptr;
+
 }  // namespace
+
+//
+// XdsChannelCredsFactory implementations for default-supported cred types.
+//
+
+class GoogleDefaultXdsChannelCredsFactory : public XdsChannelCredsFactory {
+ public:
+  RefCountedPtr<grpc_channel_credentials> CreateXdsChannelCreds(
+      const Json& /*config*/) const override {
+    return RefCountedPtr<grpc_channel_credentials>(
+        grpc_google_default_credentials_create(nullptr));
+  }
+  bool IsValidConfig(const Json& /*config*/) const override { return true; }
+  const char* creds_type() const override { return "google_default"; }
+};
+
+class InsecureXdsChannelCredsFactory : public XdsChannelCredsFactory {
+ public:
+  RefCountedPtr<grpc_channel_credentials> CreateXdsChannelCreds(
+      const Json& /*config*/) const override {
+    return RefCountedPtr<grpc_channel_credentials>(
+        grpc_insecure_credentials_create());
+  }
+  bool IsValidConfig(const Json& /*config*/) const override { return true; }
+  const char* creds_type() const override { return "insecure"; }
+};
+
+class FakeXdsChannelCredsFactory : public XdsChannelCredsFactory {
+ public:
+  RefCountedPtr<grpc_channel_credentials> CreateXdsChannelCreds(
+      const Json& /*config*/) const override {
+    return RefCountedPtr<grpc_channel_credentials>(
+        grpc_fake_transport_security_credentials_create());
+  }
+  bool IsValidConfig(const Json& /*config*/) const override { return true; }
+  const char* creds_type() const override { return "fake"; }
+};
 
 //
 // XdsChannelCredsRegistry
 //
 
-bool XdsChannelCredsRegistry::IsSupported(const std::string& creds_type) {
-  return creds_type == "google_default" || creds_type == "insecure" ||
-         creds_type == "fake";
+XdsChannelCredsRegistryState::XdsChannelCredsRegistryState() {
+  RegisterXdsChannelCredsFactory(
+      absl::make_unique<GoogleDefaultXdsChannelCredsFactory>());
+  RegisterXdsChannelCredsFactory(
+      absl::make_unique<InsecureXdsChannelCredsFactory>());
+  RegisterXdsChannelCredsFactory(
+      absl::make_unique<FakeXdsChannelCredsFactory>());
 }
 
-bool XdsChannelCredsRegistry::IsValidConfig(const std::string& /*creds_type*/,
-                                            const Json& /*config*/) {
-  // Currently, none of the creds types actually take a config, but we
-  // ignore whatever might be specified in the bootstrap file for
-  // forward compatibility reasons.
-  return true;
+bool XdsChannelCredsRegistry::IsSupported(const std::string& creds_type) {
+  return g_state->LookupXdsChannelCredsFactory(creds_type) != nullptr;
+}
+
+bool XdsChannelCredsRegistry::IsValidConfig(const std::string& creds_type,
+                                            const Json& config) {
+  XdsChannelCredsFactory* factory =
+      g_state->LookupXdsChannelCredsFactory(creds_type);
+  return factory != nullptr && factory->IsValidConfig(config);
 }
 
 RefCountedPtr<grpc_channel_credentials>
 XdsChannelCredsRegistry::MakeChannelCreds(const std::string& creds_type,
-                                          const Json& /*config*/) {
-  if (creds_type == "google_default") {
-    return RefCountedPtr<grpc_channel_credentials>(
-        grpc_google_default_credentials_create(nullptr));
-  } else if (creds_type == "insecure") {
-    return RefCountedPtr<grpc_channel_credentials>(
-        grpc_insecure_credentials_create());
-  } else if (creds_type == "fake") {
-    return RefCountedPtr<grpc_channel_credentials>(
-        grpc_fake_transport_security_credentials_create());
-  }
-  return nullptr;
+                                          const Json& config) {
+  XdsChannelCredsFactory* factory =
+      g_state->LookupXdsChannelCredsFactory(creds_type);
+  if (factory == nullptr) return nullptr;
+  return factory->CreateXdsChannelCreds(config);
+}
+
+void XdsChannelCredsRegistry::Init() {
+  if (g_state == nullptr) g_state = new XdsChannelCredsRegistryState();
+}
+
+void XdsChannelCredsRegistry::Shutdown() {
+  delete g_state;
+  g_state = nullptr;
+}
+
+void XdsChannelCredsRegistry::RegisterXdsChannelCredsFactory(
+    std::unique_ptr<XdsChannelCredsFactory> factory) {
+  g_state->RegisterXdsChannelCredsFactory(std::move(factory));
 }
 
 //
