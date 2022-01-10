@@ -47,22 +47,19 @@ TEST(XdsChannelCredsRegistryTest, DefaultCreds) {
   EXPECT_TRUE(XdsChannelCredsRegistry::IsSupported("fake"));
 
   // Non-default creds.
-  EXPECT_EQ(XdsChannelCredsRegistry::MakeChannelCreds("test", Json()),
-            nullptr);
+  EXPECT_EQ(XdsChannelCredsRegistry::MakeChannelCreds("test", Json()), nullptr);
   EXPECT_EQ(XdsChannelCredsRegistry::MakeChannelCreds("", Json()), nullptr);
 }
 
 TEST(XdsChannelCredsRegistryTest, Register) {
   // Before registration.
   EXPECT_FALSE(XdsChannelCredsRegistry::IsSupported("test"));
-  EXPECT_EQ(XdsChannelCredsRegistry::MakeChannelCreds("test", Json()),
-            nullptr);
+  EXPECT_EQ(XdsChannelCredsRegistry::MakeChannelCreds("test", Json()), nullptr);
 
   // Registration.
   XdsChannelCredsRegistry::RegisterXdsChannelCredsFactory(
       absl::make_unique<DummyXdsChannelCredsFactory>());
-  EXPECT_NE(XdsChannelCredsRegistry::MakeChannelCreds("test", Json()),
-            nullptr);
+  EXPECT_NE(XdsChannelCredsRegistry::MakeChannelCreds("test", Json()), nullptr);
 }
 
 }  // namespace
