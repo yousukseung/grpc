@@ -111,7 +111,7 @@ class XdsChannelCredsRegistryState {
 
   XdsChannelCredsFactory* LookupXdsChannelCredsFactory(
       absl::string_view creds_type) const {
-    for (auto i = 0; i < factories_.size(); ++i) {
+    for (size_t i = 0; i < factories_.size(); ++i) {
       if (creds_type == factories_[i]->creds_type()) {
         return factories_[i].get();
       }
