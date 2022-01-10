@@ -28,7 +28,8 @@
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 
-#include "include/grpc/grpc_security.h"
+#include <grpc/grpc_security.h>
+
 #include "src/core/ext/xds/certificate_provider_registry.h"
 #include "src/core/ext/xds/xds_api.h"
 #include "src/core/lib/gpr/env.h"
@@ -125,7 +126,7 @@ class XdsChannelCredsRegistryState {
   absl::InlinedVector<std::unique_ptr<XdsChannelCredsFactory>, 10> factories_;
 };
 
-static XdsChannelCredsRegistryState* g_state = nullptr;
+XdsChannelCredsRegistryState* g_state = nullptr;
 
 }  // namespace
 

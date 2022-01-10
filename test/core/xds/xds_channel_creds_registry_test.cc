@@ -16,12 +16,12 @@
 //
 //
 
-#include "src/core/ext/xds/xds_bootstrap.h"
-
 #include <gmock/gmock.h>
-#include <grpc/grpc.h>
 #include <gtest/gtest.h>
 
+#include <grpc/grpc.h>
+
+#include "src/core/ext/xds/xds_bootstrap.h"
 #include "src/core/lib/security/credentials/fake/fake_credentials.h"
 #include "test/core/util/test_config.h"
 
@@ -47,19 +47,22 @@ TEST(XdsChannelCredsRegistryTest, DefaultCreds) {
   EXPECT_TRUE(XdsChannelCredsRegistry::IsSupported("fake"));
 
   // Non-default creds.
-  EXPECT_EQ(XdsChannelCredsRegistry::MakeChannelCreds("dummy", Json()), nullptr);
+  EXPECT_EQ(XdsChannelCredsRegistry::MakeChannelCreds("dummy", Json()),
+            nullptr);
   EXPECT_EQ(XdsChannelCredsRegistry::MakeChannelCreds("", Json()), nullptr);
 }
 
 TEST(XdsChannelCredsRegistryTest, Register) {
   // Before registration.
   EXPECT_FALSE(XdsChannelCredsRegistry::IsSupported("dummy"));
-  EXPECT_EQ(XdsChannelCredsRegistry::MakeChannelCreds("dummy", Json()), nullptr);
+  EXPECT_EQ(XdsChannelCredsRegistry::MakeChannelCreds("dummy", Json()),
+            nullptr);
 
   // Registration.
   XdsChannelCredsRegistry::RegisterXdsChannelCredsFactory(
       absl::make_unique<DummyXdsChannelCredsFactory>());
-  EXPECT_NE(XdsChannelCredsRegistry::MakeChannelCreds("dummy", Json()), nullptr);
+  EXPECT_NE(XdsChannelCredsRegistry::MakeChannelCreds("dummy", Json()),
+            nullptr);
 }
 
 }  // namespace
