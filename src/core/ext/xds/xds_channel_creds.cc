@@ -14,9 +14,12 @@
 // limitations under the License.
 //
 
-#include "absl/container/flat_hash_map.h"
+#include <grpc/support/port_platform.h>
 
 #include "src/core/ext/xds/xds_channel_creds.h"
+
+#include "absl/container/flat_hash_map.h"
+
 #include "src/core/lib/security/credentials/fake/fake_credentials.h"
 
 namespace grpc_core {
@@ -27,7 +30,6 @@ using ChannelCredsMap =
     absl::flat_hash_map<absl::string_view,
                         std::unique_ptr<XdsChannelCredsImpl>>;
 ChannelCredsMap* g_creds = nullptr;
-
 
 }  // namespace
 
