@@ -46,6 +46,7 @@
 #include "src/core/lib/backoff/backoff.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_stack.h"
+#include "src/core/lib/config/core_configuration.h"
 #include "src/core/lib/gpr/env.h"
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gprpp/memory.h"
@@ -511,11 +512,12 @@ namespace {
 
 grpc_channel* CreateXdsChannel(grpc_channel_args* args,
                                const XdsBootstrap::XdsServer& server) {
-  RefCountedPtr<grpc_channel_credentials> channel_creds =
-      XdsChannelCredsRegistry::CreateXdsChannelCreds(
-          server.channel_creds_type, server.channel_creds_config);
-  return grpc_secure_channel_create(channel_creds.get(),
-                                    server.server_uri.c_str(), args, nullptr);
+  return grpc_secure_channel_create(
+      CoreConfiguration::Get()
+          .xds_channel_creds_registry()
+          .CreateXdsChannelCreds(server.channel_creds_type,
+                                 server.channel_creds_config),
+      server.server_uri.c_str(), args, nullptr);
 }
 
 }  // namespace
@@ -2312,7 +2314,6 @@ std::string XdsClient::DumpClientConfigBinary() {
 void XdsClientGlobalInit() {
   g_mu = new Mutex;
   XdsHttpFilterRegistry::Init();
-  XdsChannelCredsRegistry::Init();
 }
 
 // TODO(roth): Find a better way to clear the fallback config that does
@@ -2322,7 +2323,6 @@ void XdsClientGlobalShutdown() ABSL_NO_THREAD_SAFETY_ANALYSIS {
   g_fallback_bootstrap_config = nullptr;
   delete g_mu;
   g_mu = nullptr;
-  XdsChannelCredsRegistry::Shutdown();
   XdsHttpFilterRegistry::Shutdown();
 }
 
