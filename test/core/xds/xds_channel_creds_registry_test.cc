@@ -75,8 +75,8 @@ TEST(XdsChannelCredsRegistry2Test, Register) {
             nullptr);
 
   // Registration.
-  grpc_core::CoreConfiguration::BuildSpecialConfiguration(
-      [](grpc_core::CoreConfiguration::Builder* builder) {
+  CoreConfiguration::BuildSpecialConfiguration(
+      [](CoreConfiguration::Builder* builder) {
         BuildCoreConfiguration(builder);
         builder->xds_channel_creds_registry()->RegisterXdsChannelCredsFactory(
             absl::make_unique<TestXdsChannelCredsFactory>());
