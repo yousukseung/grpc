@@ -512,12 +512,13 @@ namespace {
 
 grpc_channel* CreateXdsChannel(grpc_channel_args* args,
                                const XdsBootstrap::XdsServer& server) {
-  return grpc_secure_channel_create(
+  RefCountedPtr<grpc_channel_credentials> channel_creds(
       CoreConfiguration::Get()
           .xds_channel_creds_registry()
           .CreateXdsChannelCreds(server.channel_creds_type,
-                                 server.channel_creds_config),
-      server.server_uri.c_str(), args, nullptr);
+                                 server.channel_creds_config));
+  return grpc_secure_channel_create(channel_creds.get(),
+                                    server.server_uri.c_str(), args, nullptr);
 }
 
 }  // namespace

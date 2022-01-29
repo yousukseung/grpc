@@ -66,8 +66,9 @@ TEST(XdsChannelCredsRegistry2Test, Register) {
   grpc_init();
 
   // Before registration.
-  EXPECT_FALSE(CoreConfiguration::Get().xds_channel_creds_registry().IsSupported(
-      "test"));
+  EXPECT_FALSE(
+      CoreConfiguration::Get().xds_channel_creds_registry().IsSupported(
+          "test"));
   EXPECT_EQ(CoreConfiguration::Get()
                 .xds_channel_creds_registry()
                 .CreateXdsChannelCreds("test", Json()),
@@ -81,12 +82,13 @@ TEST(XdsChannelCredsRegistry2Test, Register) {
             absl::make_unique<TestXdsChannelCredsFactory>());
       });
 
+  RefCountedPtr<grpc_channel_credentials> test_cred(
+      CoreConfiguration::Get()
+          .xds_channel_creds_registry()
+          .CreateXdsChannelCreds("test", Json()));
   EXPECT_TRUE(CoreConfiguration::Get().xds_channel_creds_registry().IsSupported(
       "test"));
-  EXPECT_NE(CoreConfiguration::Get()
-                .xds_channel_creds_registry()
-                .CreateXdsChannelCreds("test", Json()),
-            nullptr);
+  EXPECT_NE(test_cred.get(), nullptr);
 }
 
 }  // namespace

@@ -2895,9 +2895,9 @@ grpc_cc_library(
         "slice_refcount",
         "sockaddr_utils",
         "uri_parser",
+        "xds_channel_creds",
         "xds_type_upb",
         "xds_type_upbdefs",
-        "xds_channel_creds",
     ],
 )
 
@@ -2950,10 +2950,10 @@ grpc_cc_library(
     language = "c++",
     deps = [
         "config",
-        "json",
         "gpr_base",
         "grpc_secure",
         "grpc_security_base",
+        "json",
     ],
 )
 
