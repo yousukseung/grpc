@@ -41,7 +41,7 @@ class XdsChannelCredsRegistry {
   class Builder {
    public:
     void RegisterXdsChannelCredsFactory(
-        std::unique_ptr<XdsChannelCredsFactory> factory);
+        std::unique_ptr<XdsChannelCredsFactory> creds);
     XdsChannelCredsRegistry Build();
 
    private:
