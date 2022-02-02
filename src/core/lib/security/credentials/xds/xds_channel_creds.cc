@@ -20,32 +20,5 @@
 
 namespace grpc_core {
 
-bool XdsChannelCredsRegistry::IsSupported(const std::string& creds_type) const {
-  return factories_.find(creds_type) != factories_.end();
-}
-
-bool XdsChannelCredsRegistry::IsValidConfig(const std::string& creds_type,
-                                            const Json& config) const {
-  const auto iter = factories_.find(creds_type);
-  return iter != factories_.cend() && iter->second->IsValidConfig(config);
-}
-
-grpc_channel_credentials* XdsChannelCredsRegistry::CreateXdsChannelCreds(
-    const std::string& creds_type, const Json& config) const {
-  const auto iter = factories_.find(creds_type);
-  if (iter == factories_.cend()) return nullptr;
-  return iter->second->CreateXdsChannelCreds(config);
-}
-
-void XdsChannelCredsRegistry::Builder::RegisterXdsChannelCredsFactory(
-    std::unique_ptr<XdsChannelCredsFactory> factory) {
-  factories_[factory->creds_type()] = std::move(factory);
-}
-
-XdsChannelCredsRegistry XdsChannelCredsRegistry::Builder::Build() {
-  XdsChannelCredsRegistry registry;
-  registry.factories_.swap(factories_);
-  return registry;
-}
 
 }  // namespace grpc_core
