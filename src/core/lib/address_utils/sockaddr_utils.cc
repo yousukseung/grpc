@@ -194,8 +194,7 @@ std::string grpc_sockaddr_to_string(const grpc_resolved_address* resolved_addr,
   if (is_error != nullptr) *is_error = false;
   std::string out;
   if (addr->sa_family == GRPC_AF_UNIX) {
-    const sockaddr_un* addr_un =
-        reinterpret_cast<const sockaddr_un*>(addr);
+    const sockaddr_un* addr_un = reinterpret_cast<const sockaddr_un*>(addr);
     bool abstract = addr_un->sun_path[0] == '\0';
     if (abstract) {
       int len = resolved_addr->len - sizeof(addr->sa_family);
