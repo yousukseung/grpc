@@ -19,7 +19,6 @@
 #include <memory>
 #include <unordered_map>
 
-
 #include "absl/flags/flag.h"
 
 #include <grpc/grpc.h>
