@@ -20,6 +20,8 @@
 #include <atomic>
 #include <functional>
 
+#include <grpc/support/log.h>
+
 #include "src/core/lib/channel/channel_args_preconditioning.h"
 #include "src/core/lib/resolver/resolver_registry.h"
 #include "src/core/lib/security/credentials/channel_creds_registry.h"
