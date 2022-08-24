@@ -113,13 +113,11 @@ TEST_P(OutlierDetectionTest, SuccessRateEjectionAndUnejection) {
   // This tells us that backend 0 has been ejected.
   // It should take no more than one ejection timer interval.
   WaitForBackend(DEBUG_LOCATION, 1, /*check_status=*/nullptr,
-                 WaitForBackendOptions().set_timeout_ms(3000),
-                 rpc_options);
+                 WaitForBackendOptions().set_timeout_ms(3000), rpc_options);
   // Now wait for traffic aimed at backend 0 to switch back to backend 0.
   // This tells us that backend 0 has been unejected.
   WaitForBackend(DEBUG_LOCATION, 0, /*check_status=*/nullptr,
-                 WaitForBackendOptions().set_timeout_ms(3000),
-                 rpc_options);
+                 WaitForBackendOptions().set_timeout_ms(3000), rpc_options);
 }
 
 // We don't eject more than max_ejection_percent (default 10%) of the backends
@@ -566,8 +564,7 @@ TEST_P(OutlierDetectionTest, FailurePercentageEjectionAndUnejection) {
                           .set_metadata(std::move(metadata))
                           .set_server_expected_error(StatusCode::CANCELLED));
   WaitForBackend(DEBUG_LOCATION, 1, /*check_status=*/nullptr,
-                 WaitForBackendOptions().set_timeout_ms(3000),
-                 rpc_options);
+                 WaitForBackendOptions().set_timeout_ms(3000), rpc_options);
   // 1 backend is ejected all traffic going to the ejected backend should now
   // all be going to the other backend.
   // failure percentage enforcement_percentage of 100% is honored as this test
@@ -577,8 +574,7 @@ TEST_P(OutlierDetectionTest, FailurePercentageEjectionAndUnejection) {
   // Now wait for traffic aimed at backend 0 to switch back to backend 0.
   // This tells us that backend 0 has been unejected.
   WaitForBackend(DEBUG_LOCATION, 0, /*check_status=*/nullptr,
-                 WaitForBackendOptions().set_timeout_ms(200000),
-                 rpc_options);
+                 WaitForBackendOptions().set_timeout_ms(200000), rpc_options);
   // Verify that rpcs go to their expectedly hashed backends.
   CheckRpcSendOk(DEBUG_LOCATION, 100, rpc_options);
   CheckRpcSendOk(DEBUG_LOCATION, 100, rpc_options1);
@@ -1077,8 +1073,9 @@ TEST_P(OutlierDetectionTest, SuccessRateAndFailurePercentage) {
     CheckRpcSendOk(DEBUG_LOCATION, 1, rpc_options2);
     CheckRpcSendOk(DEBUG_LOCATION, 1, rpc_options3);
     if (std::count_if(idx.begin(), idx.end(),
-                      [this](size_t i) { return SeenBackend(i); }) == 2)
+                      [this](size_t i) { return SeenBackend(i); }) == 2) {
       break;
+    }
     EXPECT_LE(absl::Now(), deadline);
     if (absl::Now() >= deadline) break;
   }
@@ -1321,8 +1318,7 @@ TEST_P(OutlierDetectionTest, DisableOutlierDetectionWhileAddressesAreEjected) {
       RpcOptions().set_metadata(metadata).set_server_expected_error(
           StatusCode::CANCELLED));
   WaitForBackend(DEBUG_LOCATION, 1, /*check_status=*/nullptr,
-                 WaitForBackendOptions().set_timeout_ms(3000),
-                 rpc_options);
+                 WaitForBackendOptions().set_timeout_ms(3000), rpc_options);
   // 1 backend is ejected all traffic going to the ejected backend should now
   // all be going to the other backend.
   // failure percentage enforcement_percentage of 100% is honored as this test
