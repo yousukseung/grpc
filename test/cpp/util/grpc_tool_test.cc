@@ -1311,8 +1311,8 @@ TEST_F(GrpcToolTest, CallMaxRecvMessageSizeSmall) {
 
   // This should fail.
   EXPECT_FALSE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(),
-                               std::bind(PrintStream, &output_stream,
-                                         std::placeholders::_1)));
+                                    std::bind(PrintStream, &output_stream,
+                                              std::placeholders::_1)));
   // No output expected.
   EXPECT_TRUE(0 == output_stream.tellp());
   ShutdownServer();
