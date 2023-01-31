@@ -18,6 +18,12 @@
 
 #include <inttypes.h>
 
+#include <functional>
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <utility>
+
 #include <grpc/support/log.h>
 #include <grpcpp/ext/call_metric_recorder.h>
 #include <grpcpp/ext/server_metric_recorder.h>

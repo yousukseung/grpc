@@ -16,13 +16,21 @@
 //
 //
 
-#ifndef GRPC_SRC_CPP_SERVER_METRIC_RECORDER_H_
-#define GRPC_SRC_CPP_SERVER_METRIC_RECORDER_H_
+#ifndef GRPC_SRC_CPP_SERVER_BACKEND_METRIC_RECORDER_H
+#define GRPC_SRC_CPP_SERVER_BACKEND_METRIC_RECORDER_H
 
+#include <stdint.h>
+
+#include <atomic>
 #include <map>
+
+#include "absl/base/thread_annotations.h"
+#include "absl/strings/string_view.h"
 
 #include <grpcpp/ext/call_metric_recorder.h>
 #include <grpcpp/ext/server_metric_recorder.h>
+#include <grpcpp/impl/sync.h>
+#include <grpcpp/support/string_ref.h>
 
 #include "src/core/ext/filters/backend_metrics/backend_metric_provider.h"
 #include "src/core/ext/filters/client_channel/lb_policy/backend_metric_data.h"
@@ -70,4 +78,4 @@ class BackendMetricState : public grpc_core::BackendMetricProvider,
 
 }  // namespace grpc
 
-#endif  // GRPC_SRC_CPP_SERVER_METRIC_RECORDER_H_
+#endif  // GRPC_SRC_CPP_SERVER_BACKEND_METRIC_RECORDER_H
