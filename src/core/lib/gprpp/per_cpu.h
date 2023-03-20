@@ -17,7 +17,9 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <algorithm>
 #include <cstddef>
+#include <limits>
 #include <memory>
 
 #include <grpc/support/cpu.h>
