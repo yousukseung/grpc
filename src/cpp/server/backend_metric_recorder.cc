@@ -18,6 +18,7 @@
 
 #include <inttypes.h>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <string>
