@@ -20,7 +20,6 @@
 
 #include "src/core/lib/channel/call_tracer.h"
 
-#include <algorithm>
 #include <memory>
 #include <utility>
 #include <vector>
