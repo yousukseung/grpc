@@ -16,8 +16,8 @@
 //
 //
 
-#ifndef GRPCPP_GENERIC_CALLBACK_GENERIC_SERVICE_H_
-#define GRPCPP_GENERIC_CALLBACK_GENERIC_SERVICE_H_
+#ifndef GRPCPP_GENERIC_CALLBACK_GENERIC_SERVICE_H
+#define GRPCPP_GENERIC_CALLBACK_GENERIC_SERVICE_H
 
 #include <grpc/support/port_platform.h>
 #include <grpcpp/impl/server_callback_handlers.h>
@@ -81,4 +81,4 @@ class CallbackGenericService {
 
 }  // namespace grpc
 
-#endif  // GRPCPP_GENERIC_CALLBACK_GENERIC_SERVICE_H_
+#endif  // GRPCPP_GENERIC_CALLBACK_GENERIC_SERVICE_H

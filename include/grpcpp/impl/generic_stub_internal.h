@@ -79,9 +79,9 @@ class TemplatedGenericStubCallbackInternal {
 
  private:
   template <class Req, class Resp>
-  friend class ::grpc::TemplatedGenericStub;
+  friend class grpc::TemplatedGenericStub;
   template <class Req, class Resp>
-  friend class ::grpc::TemplatedGenericStubCallback;
+  friend class grpc::TemplatedGenericStubCallback;
   std::shared_ptr<grpc::ChannelInterface> channel_;
 
   void UnaryCallInternal(ClientContext* context, const std::string& method,
