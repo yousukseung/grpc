@@ -29,7 +29,8 @@ namespace grpc {
 /// types like grpc::ByteBuffer or proto::MessageLite (the base protobuf).
 template <class RequestType, class ResponseType>
 class TemplatedGenericStubCallback final
-    : public TemplatedGenericStubCallbackInternal<RequestType, ResponseType> {
+    : public internal::TemplatedGenericStubCallbackInternal<RequestType,
+                                                            ResponseType> {
  public:
   using internal::TemplatedGenericStubCallbackInternal<
       RequestType, ResponseType>::TemplatedGenericStubCallbackInternal;
