@@ -397,7 +397,7 @@ const ExperimentMetadata g_experiment_metadata[] = {
      additional_constraints_work_serializer_clears_time_cache, nullptr, 0, true,
      true},
     {"work_serializer_dispatch", description_work_serializer_dispatch,
-     additional_constraints_work_serializer_dispatch, nullptr, 0, false, true},
+     additional_constraints_work_serializer_dispatch, nullptr, 0, true, true},
     {"call_v3", description_call_v3, additional_constraints_call_v3,
      required_experiments_call_v3, 3, false, false},
 };
