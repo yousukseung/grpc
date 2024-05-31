@@ -70,8 +70,14 @@ def _async_unary(stub):
     )
 
     response_future = stub.UnaryCall.future(request, timeout=_RPC_TIMEOUT_S)
+    sys.stderr.write("_async_unary response_future built\n")
+    sys.stderr.flush()
     response = response_future.result()
+    sys.stderr.write("_async_unary response returned, validating exp:{}/{} act:{}/{}\n".format(size, messages_pb2.COMPRESSABLE, len(response.payload.body), response.payload.type))
+    sys.stderr.flush()
     _validate_payload_type_and_length(response, messages_pb2.COMPRESSABLE, size)
+    sys.stderr.write("_async_unary response successfully validated\n")
+    sys.stderr.flush()
 
 
 def _blocking_unary(stub):
@@ -144,11 +150,17 @@ class _ChildProcess(object):
         try:
             self._task(*self._args)
         except grpc.RpcError as rpc_error:
+            sys.stderr.write("I'm child, RpcError:\n")
+            sys.stderr.flush()
             traceback.print_exc()
             self._exceptions.put("RpcError: %s" % rpc_error)
         except Exception as e:  # pylint: disable=broad-except
+            sys.stderr.write("I'm child, exception:\n")
+            sys.stderr.flush()
             traceback.print_exc()
             self._exceptions.put(e)
+        sys.stderr.write("I'm child, successful:\n")
+        sys.stderr.flush()
         sys.exit(0)
 
     def _orchestrate_child_gdb(self):
@@ -173,18 +185,29 @@ class _ChildProcess(object):
 
     def start(self):
         # NOTE: Try uncommenting the following line if the child is segfaulting.
-        # self._orchestrate_child_gdb()
+        self._orchestrate_child_gdb()
         ret = os.fork()
+
         if ret == 0:
+            sys.stderr.write("I'm child, forked:\n")
+            sys.stderr.flush()
             self._child_main()
         else:
+            sys.stderr.write("I'm parent, child forked: {}\n".format(ret))
+            sys.stderr.flush()
             self._child_pid = ret
 
     def wait(self, timeout):
+        sys.stderr.write("wait() called timeout:{}\n".format(timeout))
+        sys.stderr.flush()
         total = 0.0
         wait_interval = 1.0
         while total < timeout:
+            sys.stderr.write("calling waitpid pid:{} total/timeout:{}/{}\n".format(self._child_pid, total, timeout))
+            sys.stderr.flush()
             ret, termination = os.waitpid(self._child_pid, os.WNOHANG)
+            sys.stderr.write("waitpid returned {},{}\n".format(ret, termination))
+            sys.stderr.flush()
             if ret == self._child_pid:
                 self._rc = termination
                 return True
@@ -231,8 +254,11 @@ class _ChildProcess(object):
             sys.stderr.flush()
 
     def finish(self):
+        sys.stderr.write("finish() called\n")
+        sys.stderr.flush()
         terminated = self.wait(_CHILD_FINISH_TIMEOUT_S)
         sys.stderr.write("Exit code: {}\n".format(self._rc))
+        sys.stderr.flush()
         if not terminated:
             self._print_backtraces()
             raise RuntimeError("Child process did not terminate")
@@ -250,12 +276,18 @@ class _ChildProcess(object):
 
 def _async_unary_same_channel(channel):
     def child_target():
+        sys.stderr.write("async_unary_same_channel::child_target() started.")
+        sys.stderr.flush()
         try:
             _async_unary(stub)
+            sys.stderr.write("async_unary returned without an exception")
+            sys.stderr.flush()
             raise Exception(
                 "Child should not be able to re-use channel after fork"
             )
         except ValueError as expected_value_error:
+            sys.stderr.write("async_unary returned with an exception: {}".format(expected_value_error))
+            sys.stderr.flush()
             pass
 
     stub = test_pb2_grpc.TestServiceStub(channel)
