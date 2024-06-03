@@ -73,7 +73,14 @@ def _async_unary(stub):
     sys.stderr.write("_async_unary response_future built\n")
     sys.stderr.flush()
     response = response_future.result()
-    sys.stderr.write("_async_unary response returned, validating exp:{}/{} act:{}/{}\n".format(size, messages_pb2.COMPRESSABLE, len(response.payload.body), response.payload.type))
+    sys.stderr.write(
+        "_async_unary response returned, validating exp:{}/{} act:{}/{}\n".format(
+            size,
+            messages_pb2.COMPRESSABLE,
+            len(response.payload.body),
+            response.payload.type,
+        )
+    )
     sys.stderr.flush()
     _validate_payload_type_and_length(response, messages_pb2.COMPRESSABLE, size)
     sys.stderr.write("_async_unary response successfully validated\n")
@@ -203,10 +210,16 @@ class _ChildProcess(object):
         total = 0.0
         wait_interval = 1.0
         while total < timeout:
-            sys.stderr.write("calling waitpid pid:{} total/timeout:{}/{}\n".format(self._child_pid, total, timeout))
+            sys.stderr.write(
+                "calling waitpid pid:{} total/timeout:{}/{}\n".format(
+                    self._child_pid, total, timeout
+                )
+            )
             sys.stderr.flush()
             ret, termination = os.waitpid(self._child_pid, os.WNOHANG)
-            sys.stderr.write("waitpid returned {},{}\n".format(ret, termination))
+            sys.stderr.write(
+                "waitpid returned {},{}\n".format(ret, termination)
+            )
             sys.stderr.flush()
             if ret == self._child_pid:
                 self._rc = termination
@@ -286,7 +299,11 @@ def _async_unary_same_channel(channel):
                 "Child should not be able to re-use channel after fork"
             )
         except ValueError as expected_value_error:
-            sys.stderr.write("async_unary returned with an exception: {}".format(expected_value_error))
+            sys.stderr.write(
+                "async_unary returned with an exception: {}".format(
+                    expected_value_error
+                )
+            )
             sys.stderr.flush()
             pass
 
