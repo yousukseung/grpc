@@ -324,7 +324,9 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::PrepareFork() {
   LOG(INFO) << "WorkStealingThreadPoolImpl::PrepareFork SignallAll() called";
   auto threads_were_shut_down = living_thread_count_.BlockUntilThreadCount(
       0, "forking", kBlockUntilThreadCountTimeout);
-  LOG(INFO) << "WorkStealingThreadPoolImpl::PrepareFork after blocking: thread_shut_down: " << threads_were_shut_down;
+  LOG(INFO) << "WorkStealingThreadPoolImpl::PrepareFork after blocking: "
+               "thread_shut_down: "
+            << threads_were_shut_down;
   if (!threads_were_shut_down.ok() && g_log_verbose_failures) {
     DumpStacksAndCrash();
   }
