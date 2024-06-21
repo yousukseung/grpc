@@ -34,7 +34,9 @@
 #include <google/protobuf/any.pb.h>
 #include <google/protobuf/struct.pb.h>
 
+#include "absl/base/thread_annotations.h"
 #include "absl/strings/str_cat.h"
+#include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
@@ -626,6 +628,12 @@ class XdsClientTest : public ::testing::Test {
         std::pair<std::string /*xds_server*/, std::string /*resource_type*/>,
         uint64_t>;
     using ServerFailureMap = std::map<std::string /*xds_server*/, uint64_t>;
+    // Context for WaitForReports().
+    struct WaitCtx{
+      uint32_t resource_updates;
+      uint32_t server_failures;
+      CondVar condvar;
+    };
 
     ResourceUpdateMap resource_updates_valid() const {
       MutexLock lock(&mu_);
@@ -636,6 +644,25 @@ class XdsClientTest : public ::testing::Test {
       return resource_updates_invalid_;
     }
     const ServerFailureMap& server_failures() const { return server_failures_; }
+    void ResetWaitCtx(WaitCtx* wait_ctx) const {
+      MutexLock lock(&mu_);
+      wait_ctx->resource_updates = num_resource_updates();
+      wait_ctx->server_failures = num_server_failures();
+    }
+    // Waits until update counts become equal to or greater than the expected
+    // counts. Only one active wait at a time.
+    void WaitForReports(WaitCtx* wait_ctx,
+                        absl::Duration timeout = absl::Seconds(3)) {
+      MutexLock lock(&mu_);
+      ASSERT_EQ(wait_ctx_, nullptr)
+          << "Only one WaitForReports() call is allowed at a time.";
+      if (ReportsReceived(*wait_ctx)) return;
+      wait_ctx_ = wait_ctx;
+      ASSERT_FALSE(wait_ctx_->condvar.WaitWithTimeout(
+          &mu_, timeout * grpc_test_slowdown_factor()))
+          << "Timed out waiting for reports.";
+      wait_ctx_ = nullptr;
+    }
 
    private:
     void ReportResourceUpdates(absl::string_view xds_server,
@@ -651,17 +678,53 @@ class XdsClientTest : public ::testing::Test {
       if (num_resources_invalid > 0) {
         resource_updates_invalid_[key] += num_resources_invalid;
       }
+      if (wait_ctx_ != nullptr && ReportsReceived(*wait_ctx_)) {
+        wait_ctx_->condvar.SignalAll();
+      }
     }
 
     void ReportServerFailure(absl::string_view xds_server) override {
       MutexLock lock(&mu_);
       ++server_failures_[std::string(xds_server)];
+      if (wait_ctx_ != nullptr && ReportsReceived(*wait_ctx_)) {
+        wait_ctx_->condvar.SignalAll();
+      }
+    }
+
+    bool ReportsReceived(const WaitCtx& expected)
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(&mu_) {
+      return num_resource_updates() >= expected.resource_updates &&
+             num_server_failures() >= expected.server_failures;
+    }
+
+    uint32_t num_resource_updates() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(&mu_) {
+      uint32_t num_resource_updates = 0;
+      for (auto iter = resource_updates_valid_.cbegin();
+           iter != resource_updates_valid_.cend(); ++iter) {
+        num_resource_updates += iter->second;
+      }
+      for (auto iter = resource_updates_invalid_.cbegin();
+           iter != resource_updates_invalid_.cend(); ++iter) {
+        num_resource_updates += iter->second;
+      }
+      return num_resource_updates;
+    }
+
+    uint32_t num_server_failures() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(&mu_) {
+      uint32_t num_server_failures = 0;
+      for (auto iter = server_failures_.cbegin();
+           iter != server_failures_.cend(); ++iter) {
+        num_server_failures += iter->second;
+      }
+      return num_server_failures;
     }
 
     mutable Mutex mu_;
     ResourceUpdateMap resource_updates_valid_ ABSL_GUARDED_BY(mu_);
     ResourceUpdateMap resource_updates_invalid_ ABSL_GUARDED_BY(mu_);
     ServerFailureMap server_failures_ ABSL_GUARDED_BY(mu_);
+    // Up to one wait at a time, may be null.
+    WaitCtx* wait_ctx_ ABSL_GUARDED_BY(mu_) = nullptr;
   };
 
   using ResourceCounts =
@@ -702,6 +765,7 @@ class XdsClientTest : public ::testing::Test {
         transport_factory->Ref().TakeAsSubclass<FakeXdsTransportFactory>();
     auto metrics_reporter = std::make_unique<MetricsReporter>();
     metrics_reporter_ = metrics_reporter.get();
+    metrics_reporter_->ResetWaitCtx(&reporter_ctx_);
     xds_client_ = MakeRefCounted<XdsClient>(
         bootstrap_builder.Build(), std::move(transport_factory),
         grpc_event_engine::experimental::GetDefaultEventEngine(),
@@ -865,6 +929,7 @@ class XdsClientTest : public ::testing::Test {
   RefCountedPtr<FakeXdsTransportFactory> transport_factory_;
   RefCountedPtr<XdsClient> xds_client_;
   MetricsReporter* metrics_reporter_ = nullptr;
+  MetricsReporter::WaitCtx reporter_ctx_;
 };
 
 MATCHER_P3(ResourceCountLabelsEq, xds_authority, resource_type, cache_state,
@@ -929,6 +994,9 @@ TEST_F(XdsClientTest, BasicWatch) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -996,6 +1064,9 @@ TEST_F(XdsClientTest, UpdateFromServer) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -1029,6 +1100,9 @@ TEST_F(XdsClientTest, UpdateFromServer) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 9);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -1084,6 +1158,9 @@ TEST_F(XdsClientTest, MultipleWatchersForSameResource) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -1131,6 +1208,9 @@ TEST_F(XdsClientTest, MultipleWatchersForSameResource) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 9);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -1201,6 +1281,9 @@ TEST_F(XdsClientTest, SubscribeToMultipleResources) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -1256,6 +1339,9 @@ TEST_F(XdsClientTest, SubscribeToMultipleResources) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo2");
   EXPECT_EQ(resource->value, 7);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -1354,6 +1440,9 @@ TEST_F(XdsClientTest, UpdateContainsOnlyChangedResource) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo2");
   EXPECT_EQ(resource->value, 7);
+  // Wait for resource updates to be recorded.
+  reporter_ctx_.resource_updates += 2;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -1387,6 +1476,9 @@ TEST_F(XdsClientTest, UpdateContainsOnlyChangedResource) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 9);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -1465,6 +1557,9 @@ TEST_F(XdsClientTest, ResourceValidationFailure) {
             "invalid resource: INVALID_ARGUMENT: errors validating JSON: "
             "[field:value error:is not a number] (node ID:xds_client_test)")
       << *error;
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre());
@@ -1687,6 +1782,9 @@ TEST_F(XdsClientTest, ResourceValidationFailureMultipleResources) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo4");
   EXPECT_EQ(resource->value, 5);
+  // Wait for resource updates to be recorded.
+  reporter_ctx_.resource_updates += 6;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -1782,6 +1880,9 @@ TEST_F(XdsClientTest, ResourceValidationFailureForCachedResource) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -1819,6 +1920,9 @@ TEST_F(XdsClientTest, ResourceValidationFailureForCachedResource) {
             "invalid resource: INVALID_ARGUMENT: errors validating JSON: "
             "[field:value error:is not a number] (node ID:xds_client_test)")
       << *error;
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -1900,6 +2004,9 @@ TEST_F(XdsClientTest, WildcardCapableResponseWithEmptyResource) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "wc1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for resource updates to be recorded.
+  reporter_ctx_.resource_updates += 2;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(
       metrics_reporter_->resource_updates_valid(),
@@ -1970,6 +2077,9 @@ TEST_F(XdsClientTest, ResourceDeletion) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "wc1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(
       metrics_reporter_->resource_updates_valid(),
@@ -2045,6 +2155,9 @@ TEST_F(XdsClientTest, ResourceDeletion) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "wc1");
   EXPECT_EQ(resource->value, 7);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(
       metrics_reporter_->resource_updates_valid(),
@@ -2106,6 +2219,9 @@ TEST_F(XdsClientTest, ResourceDeletionIgnoredWhenConfigured) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "wc1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(
       metrics_reporter_->resource_updates_valid(),
@@ -2185,6 +2301,9 @@ TEST_F(XdsClientTest, ResourceDeletionIgnoredWhenConfigured) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "wc1");
   EXPECT_EQ(resource->value, 7);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(
       metrics_reporter_->resource_updates_valid(),
@@ -2332,6 +2451,9 @@ TEST_F(XdsClientTest, StreamClosedByServerWithoutSeeingResponse) {
   CheckRequestNode(*request);  // Should be present on the first request.
   // Server closes the stream without sending a response.
   stream->MaybeSendStatusToClient(absl::UnavailableError("ugh"));
+  // Wait for a server failure to be recorded.
+  reporter_ctx_.server_failures += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(GetServerConnections(), ::testing::ElementsAre(::testing::Pair(
                                           kDefaultXdsServerUrl, false)));
@@ -2428,6 +2550,9 @@ TEST_F(XdsClientTest, ConnectionFails) {
             "xDS channel for server default_xds_server: "
             "connection failed (node ID:xds_client_test)")
       << *error;
+  // Wait for a server failure to be recorded.
+  reporter_ctx_.server_failures += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Connection reported as unhappy.
   EXPECT_THAT(GetServerConnections(), ::testing::ElementsAre(::testing::Pair(
                                           kDefaultXdsServerUrl, false)));
@@ -2546,6 +2671,9 @@ TEST_F(XdsClientTest, ResourceDoesNotExistUponTimeout) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -2811,6 +2939,9 @@ TEST_F(XdsClientTest,
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -2894,6 +3025,9 @@ TEST_F(XdsClientTest,
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo2");
   EXPECT_EQ(resource->value, 7);
+  // Wait for resource updates to be recorded.
+  reporter_ctx_.resource_updates += 2;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -2960,6 +3094,9 @@ TEST_F(XdsClientTest, DoNotSendDoesNotExistForCachedResource) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -3024,6 +3161,9 @@ TEST_F(XdsClientTest, DoNotSendDoesNotExistForCachedResource) {
           .Serialize());
   // Watcher will not see any update, since the resource is unchanged.
   EXPECT_TRUE(watcher->ExpectNoEvent(absl::Seconds(1)));
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -3082,6 +3222,9 @@ TEST_F(XdsClientTest, ResourceWrappedInResourceMessage) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -3137,6 +3280,9 @@ TEST_F(XdsClientTest, MultipleResourceTypes) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -3181,6 +3327,9 @@ TEST_F(XdsClientTest, MultipleResourceTypes) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource2->name, "bar1");
   EXPECT_EQ(resource2->value, "whee");
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(
@@ -3268,6 +3417,9 @@ TEST_F(XdsClientTest, Federation) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -3336,6 +3488,9 @@ TEST_F(XdsClientTest, Federation) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, kXdstpResourceName);
   EXPECT_EQ(resource->value, 3);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(
@@ -3414,6 +3569,9 @@ TEST_F(XdsClientTest, FederationAuthorityDefaultsToTopLevelXdsServer) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -3462,6 +3620,9 @@ TEST_F(XdsClientTest, FederationAuthorityDefaultsToTopLevelXdsServer) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, kXdstpResourceName);
   EXPECT_EQ(resource->value, 3);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -3620,6 +3781,9 @@ TEST_F(XdsClientTest, FederationChannelFailureReportedToWatchers) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -3677,6 +3841,9 @@ TEST_F(XdsClientTest, FederationChannelFailureReportedToWatchers) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, kXdstpResourceName);
   EXPECT_EQ(resource->value, 3);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(
@@ -3725,6 +3892,9 @@ TEST_F(XdsClientTest, FederationChannelFailureReportedToWatchers) {
       << *error;
   // The watcher for "foo1" should not see any error.
   EXPECT_FALSE(watcher->HasEvent());
+  // Wait for a server failure to be recorded.
+  reporter_ctx_.server_failures += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Check metric data.
   EXPECT_THAT(GetServerConnections(),
               ::testing::ElementsAre(
@@ -3868,6 +4038,9 @@ TEST_F(XdsClientTest, FallbackAndRecover) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo1");
   EXPECT_EQ(resource->value, 6);
+  // Wait for a resource update to be recorded.
+  reporter_ctx_.resource_updates += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Result (local): Metrics show 1 resource update and 1 cached resource.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(::testing::Pair(
@@ -3897,6 +4070,9 @@ TEST_F(XdsClientTest, FallbackAndRecover) {
   EXPECT_EQ(error->message(),
             "xDS channel for server default_xds_server: Server down (node "
             "ID:xds_client_test)");
+  // Wait for a server failure to be recorded.
+  reporter_ctx_.server_failures += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Result (local): The metrics show the channel as being unhealthy.
   EXPECT_THAT(GetServerConnections(), ::testing::ElementsAre(::testing::Pair(
                                           kDefaultXdsServerUrl, false)));
@@ -3977,6 +4153,9 @@ TEST_F(XdsClientTest, FallbackAndRecover) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->name, "foo2");
   EXPECT_EQ(resource->value, 30);
+  // Wait for resource updates to be recorded.
+  reporter_ctx_.resource_updates += 2;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Result (local): Metrics show an update from fallback server.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
               ::testing::ElementsAre(
@@ -4013,6 +4192,9 @@ TEST_F(XdsClientTest, FallbackAndRecover) {
           .AddFooResource(XdsFooResource("foo1", 35))
           .AddFooResource(XdsFooResource("foo2", 25))
           .Serialize());
+  // Wait for resource updates to be recorded.
+  reporter_ctx_.resource_updates += 2;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   // Result (local): Metrics show that we've closed the channel to the fallback
   //   server and received resource updates from the primary server.
   EXPECT_THAT(metrics_reporter_->resource_updates_valid(),
@@ -4084,6 +4266,9 @@ TEST_F(XdsClientTest, FallbackReportsError) {
               ::testing::ElementsAre(
                   ::testing::Pair(kDefaultXdsServerUrl, false),
                   ::testing::Pair(fallback_server.server_uri(), true)));
+  // Wait for a server failure to be recorded.
+  reporter_ctx_.server_failures += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   EXPECT_THAT(metrics_reporter_->server_failures(),
               ::testing::ElementsAre(::testing::Pair(kDefaultXdsServerUrl, 1)));
   // Fallback happens now
@@ -4101,6 +4286,9 @@ TEST_F(XdsClientTest, FallbackReportsError) {
               ::testing::ElementsAre(
                   ::testing::Pair(kDefaultXdsServerUrl, false),
                   ::testing::Pair(fallback_server.server_uri(), false)));
+  // Wait for a server failure to be recorded.
+  reporter_ctx_.server_failures += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   EXPECT_THAT(
       metrics_reporter_->server_failures(),
       ::testing::ElementsAre(::testing::Pair(kDefaultXdsServerUrl, 1),
@@ -4154,6 +4342,9 @@ TEST_F(XdsClientTest, FallbackOnStartup) {
               ::testing::ElementsAre(
                   ::testing::Pair(kDefaultXdsServerUrl, false),
                   ::testing::Pair(fallback_server.server_uri(), true)));
+  // Wait for a server failure to be recorded.
+  reporter_ctx_.server_failures += 1;
+  metrics_reporter_->WaitForReports(&reporter_ctx_);
   EXPECT_THAT(metrics_reporter_->server_failures(),
               ::testing::ElementsAre(::testing::Pair(kDefaultXdsServerUrl, 1)));
   // XdsClient should have delivered the response to the watcher.
