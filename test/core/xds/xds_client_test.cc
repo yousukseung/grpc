@@ -629,7 +629,7 @@ class XdsClientTest : public ::testing::Test {
         uint64_t>;
     using ServerFailureMap = std::map<std::string /*xds_server*/, uint64_t>;
     // Context for WaitForReports().
-    struct WaitCtx{
+    struct WaitCtx {
       uint32_t resource_updates;
       uint32_t server_failures;
       CondVar condvar;
