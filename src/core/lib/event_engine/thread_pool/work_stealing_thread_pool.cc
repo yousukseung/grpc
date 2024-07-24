@@ -228,6 +228,10 @@ WorkStealingThreadPool::WorkStealingThreadPoolImpl::WorkStealingThreadPoolImpl(
     size_t reserve_threads)
     : reserve_threads_(reserve_threads), queue_(this) {}
 
+WorkStealingThreadPool::WorkStealingThreadPoolImpl::~WorkStealingThreadPoolImpl() {
+  LOG(INFO) << "WorkStealingThreadpoolImpl destroyed.";
+}
+
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Start() {
   for (size_t i = 0; i < reserve_threads_; i++) {
     StartThread();
@@ -268,23 +272,30 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::StartThread() {
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Quiesce() {
   LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce";
   SetShutdown(true);
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce SetShutdown";
   // Wait until all threads have exited.
   // Note that if this is a threadpool thread then we won't exit this thread
   // until all other threads have exited, so we need to wait for just one thread
   // running instead of zero.
   bool is_threadpool_thread = g_local_queue != nullptr;
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce is_threadpool_thread:" << is_threadpool_thread;
   work_signal()->SignalAll();
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce work_signal() signalled.";
   auto threads_were_shut_down = living_thread_count_.BlockUntilThreadCount(
       is_threadpool_thread ? 1 : 0, "shutting down",
       g_log_verbose_failures ? kBlockUntilThreadCountTimeout
                              : grpc_core::Duration::Infinity());
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce threads_were_shut_down: " << threads_were_shut_down;
   if (!threads_were_shut_down.ok() && g_log_verbose_failures) {
     DumpStacksAndCrash();
   }
   CHECK(queue_.Empty());
   quiesced_.store(true, std::memory_order_relaxed);
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce marked quiesced.";
   grpc_core::MutexLock lock(&lifeguard_ptr_mu_);
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce resetting lifeguard";
   lifeguard_.reset();
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce done reset lifeguard";
 }
 
 bool WorkStealingThreadPool::WorkStealingThreadPoolImpl::SetThrottled(
@@ -318,7 +329,7 @@ bool WorkStealingThreadPool::WorkStealingThreadPoolImpl::IsQuiesced() {
 }
 
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::PrepareFork() {
-  LOG(INFO) << "WorkStealingThreadPoolImpl::PrepareFork";
+  //LOG(INFO) << "WorkStealingThreadPoolImpl::PrepareFork";
   SetForking(true);
   work_signal_.SignalAll();
   auto threads_were_shut_down = living_thread_count_.BlockUntilThreadCount(
@@ -398,16 +409,22 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Lifeguard::
     // reduce the check rate if the pool is idle.
     if (pool_->IsShutdown()) {
       if (pool_->IsQuiesced()) break;
+      LOG(INFO) << "Lifeguard: pool is shutting down but not quiesced.";
     } else {
-      lifeguard_should_shut_down_->WaitForNotificationWithTimeout(
+      LOG(INFO) << "Lifeguard: waiting for shutdown";
+      bool r = lifeguard_should_shut_down_->WaitForNotificationWithTimeout(
           absl::Milliseconds(
               (backoff_.NextAttemptTime() - grpc_core::Timestamp::Now())
                   .millis()));
+      LOG(INFO) << "Lifeguard: done waiting for shutdown: " << r;
     }
     MaybeStartNewThread();
   }
+  LOG(INFO) << "Lifeguard is terminating";
   lifeguard_running_.store(false, std::memory_order_relaxed);
+  LOG(INFO) << "Lifeguard is marked not running";
   lifeguard_is_shut_down_->Notify();
+  LOG(INFO) << "Lifeguard shutdown notified";
 }
 
 WorkStealingThreadPool::WorkStealingThreadPoolImpl::Lifeguard::~Lifeguard() {
@@ -432,13 +449,16 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Lifeguard::
   // No new threads are started when forking.
   // No new work is done when forking needs to begin.
   if (pool_->forking_.load()) return;
+  //LOG(INFO) << "MaybeStartNewThread NOT working.";
   const auto living_thread_count = pool_->living_thread_count()->count();
+  //LOG(INFO) << "MaybeStartNewThread live_thread_count: " << living_thread_count;
   // Wake an idle worker thread if there's global work to be had.
   if (pool_->busy_thread_count()->count() < living_thread_count) {
     if (!pool_->queue_.Empty()) {
       pool_->work_signal()->Signal();
       backoff_.Reset();
     }
+    //LOG(INFO) << "MaybeStartNewThread idle threads will eventually wake up, returning";
     // Idle threads will eventually wake up for an attempt at work stealing.
     return;
   }
@@ -450,6 +470,7 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Lifeguard::
               pool_->last_started_thread_) <
       kTimeBetweenThrottledThreadStarts) {
     backoff_.Reset();
+    //LOG(INFO) << "MaybeStartNewThread no new threads if in the throttled state.";
     return;
   }
   // All workers are busy and the pool is not throttled. Start a new thread.
@@ -461,6 +482,7 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Lifeguard::
       ")",
       living_thread_count + 1);
   pool_->StartThread();
+  //LOG(INFO) << "MaybeStartNewThread new thread started.";
   // Tell the lifeguard to monitor the pool more closely.
   backoff_.Reset();
 }
