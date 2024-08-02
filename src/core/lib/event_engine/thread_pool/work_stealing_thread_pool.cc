@@ -228,6 +228,10 @@ WorkStealingThreadPool::WorkStealingThreadPoolImpl::WorkStealingThreadPoolImpl(
     size_t reserve_threads)
     : reserve_threads_(reserve_threads), queue_(this) {}
 
+WorkStealingThreadPool::WorkStealingThreadPoolImpl::~WorkStealingThreadPoolImpl() {
+  LOG(INFO) << "WorkStealingThreadPoolImpl destroyed";
+}
+
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Start() {
   for (size_t i = 0; i < reserve_threads_; i++) {
     StartThread();
@@ -257,8 +261,11 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::StartThread() {
       "event_engine",
       [](void* arg) {
         ThreadState* worker = static_cast<ThreadState*>(arg);
+        LOG(INFO) << "Thread started. worker: " << worker;
         worker->ThreadBody();
+        LOG(INFO) << "Thread terminated, deleting worker: " << worker;
         delete worker;
+        LOG(INFO) << "Thread deleted.";
       },
       new ThreadState(shared_from_this()), nullptr,
       grpc_core::Thread::Options().set_tracked(false).set_joinable(false))
@@ -268,23 +275,31 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::StartThread() {
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Quiesce() {
   LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce";
   SetShutdown(true);
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce SetShutdown(true) done";
   // Wait until all threads have exited.
   // Note that if this is a threadpool thread then we won't exit this thread
   // until all other threads have exited, so we need to wait for just one thread
   // running instead of zero.
   bool is_threadpool_thread = g_local_queue != nullptr;
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce is_threadpool_thread is " << is_threadpool_thread;
   work_signal()->SignalAll();
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce work_signal()->SignalAll() called.";
   auto threads_were_shut_down = living_thread_count_.BlockUntilThreadCount(
       is_threadpool_thread ? 1 : 0, "shutting down",
       g_log_verbose_failures ? kBlockUntilThreadCountTimeout
                              : grpc_core::Duration::Infinity());
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce threads_were_shut_down is " << threads_were_shut_down;
   if (!threads_were_shut_down.ok() && g_log_verbose_failures) {
     DumpStacksAndCrash();
   }
   CHECK(queue_.Empty());
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce queue_ is empty.";
   quiesced_.store(true, std::memory_order_relaxed);
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce quiesced set to true";
   grpc_core::MutexLock lock(&lifeguard_ptr_mu_);
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce resetting lifeguard.";
   lifeguard_.reset();
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce returning.";
 }
 
 bool WorkStealingThreadPool::WorkStealingThreadPoolImpl::SetThrottled(
@@ -494,6 +509,7 @@ void WorkStealingThreadPool::ThreadState::ThreadBody() {
     // loop until the thread should no longer run
   }
   // cleanup
+  //LOG(INFO) << "WorkStealingThreadPool ThreadBody. Cleaning Up.";
   if (pool_->IsForking()) {
     // TODO(hork): consider WorkQueue::AddAll(WorkQueue*)
     EventEngine::Closure* closure;
@@ -504,14 +520,18 @@ void WorkStealingThreadPool::ThreadState::ThreadBody() {
       }
     }
   } else if (pool_->IsShutdown()) {
+    //LOG(INFO) << "WorkStealingThreadPool ThreadBody. Shutting down, calling FinishDraining()";
     FinishDraining();
   }
   CHECK(g_local_queue->Empty());
+  //LOG(INFO) << "WorkStealingThreadPool ThreadBody. Unenrolling";
   pool_->theft_registry()->Unenroll(g_local_queue);
+  LOG(INFO) << "WorkStealingThreadPool ThreadBody. Deleting g_local_queue: " << g_local_queue;
   delete g_local_queue;
   if (g_log_verbose_failures) {
     pool_->UntrackThread(gpr_thd_currentid());
   }
+  LOG(INFO) << "WorkStealingThreadPool ThreadBody. Returning";
 }
 
 void WorkStealingThreadPool::ThreadState::SleepIfRunning() {
@@ -559,14 +579,19 @@ bool WorkStealingThreadPool::ThreadState::Step() {
     if (pool_->IsShutdown()) break;
     bool timed_out = pool_->work_signal()->WaitWithTimeout(
         backoff_.NextAttemptTime() - grpc_core::Timestamp::Now());
-    if (pool_->IsForking() || pool_->IsShutdown()) break;
+    if (pool_->IsForking() || pool_->IsShutdown()) {
+      LOG(INFO) << "WorkStealingThreadPool Thread terminating. forking:" << pool_->IsForking() << ",shutdwon:" << pool_->IsShutdown();
+      break;
+    }
     // Quit a thread if the pool has more than it requires, and this thread
     // has been idle long enough.
     if (timed_out &&
         pool_->living_thread_count()->count() > pool_->reserve_threads() &&
         std::chrono::steady_clock::now() - start_time > kIdleThreadLimit) {
+      LOG(INFO) << "WorkStealingThreadPool Thread terminating, idled for too long.";
       return false;
     }
+    LOG(INFO) << "WorkStealingThreadPool Thread signalled. timed_out: " << timed_out;
   }
   if (pool_->IsForking()) {
     // save the closure since we aren't going to execute it.
@@ -574,32 +599,46 @@ bool WorkStealingThreadPool::ThreadState::Step() {
     return false;
   }
   if (closure != nullptr) {
+    LOG(INFO) << "WorkStealingThreadPool closure is non-null, running. closure:" << closure;
     auto busy =
         pool_->busy_thread_count()->MakeAutoThreadCounter(busy_count_idx_);
     closure->Run();
   }
+  LOG(INFO) << "WorkStealingThreadPool resetting backoff";
   backoff_.Reset();
+  LOG(INFO) << "WorkStealingThreadPool backoff reset. shoud_run:" << should_run_again;
   return should_run_again;
 }
 
 void WorkStealingThreadPool::ThreadState::FinishDraining() {
+  //LOG(INFO) << "WorkStealingThreadPool FinishDraining() called";
   // The thread is definitionally busy while draining
   auto busy =
       pool_->busy_thread_count()->MakeAutoThreadCounter(busy_count_idx_);
   // If a fork occurs at any point during shutdown, quit draining. The post-fork
   // threads will finish draining the global queue.
+  //LOG(INFO) << "WorkStealingThreadPool FinishDraining() Entering while()";
   while (!pool_->IsForking()) {
     if (!g_local_queue->Empty()) {
+      //LOG(INFO) << "WorkStealingThreadPool FinishDraining() popping";
       auto* closure = g_local_queue->PopMostRecent();
+      //LOG(INFO) << "WorkStealingThreadPool FinishDraining() popped: " << closure;
       if (closure != nullptr) {
+        //LOG(INFO) << "WorkStealingThreadPool FinishDraining() running closure.";
         closure->Run();
+        //LOG(INFO) << "WorkStealingThreadPool FinishDraining() closure returned.";
       }
       continue;
     }
+    //LOG(INFO) << "WorkStealingThreadPool FinishDraining() local queue is empty";
     if (!pool_->queue()->Empty()) {
+      //LOG(INFO) << "WorkStealingThreadPool FinishDraining() popping from pool queue";
       auto* closure = pool_->queue()->PopMostRecent();
+      //LOG(INFO) << "WorkStealingThreadPool FinishDraining() popped from pool queue: " << closure;
       if (closure != nullptr) {
+        //LOG(INFO) << "WorkStealingThreadPool FinishDraining() running closure";
         closure->Run();
+        //LOG(INFO) << "WorkStealingThreadPool FinishDraining() closure returned";
       }
       continue;
     }
