@@ -251,8 +251,7 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Run(
 
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::StartThread() {
   last_started_thread_.store(
-      grpc_core::Timestamp::Now().milliseconds_after_process_epoch(),
-      std::memory_order_relaxed);
+      grpc_core::Timestamp::Now().milliseconds_after_process_epoch());
   grpc_core::Thread(
       "event_engine",
       [](void* arg) {
@@ -287,7 +286,7 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Quiesce() {
   }
   CHECK(queue_.Empty());
   LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce queue_ is empty.";
-  quiesced_.store(true, std::memory_order_relaxed);
+  quiesced_.store(true);
   LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce quiesced set to true";
   grpc_core::MutexLock lock(&lifeguard_ptr_mu_);
   LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce resetting lifeguard.";
@@ -297,7 +296,7 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Quiesce() {
 
 bool WorkStealingThreadPool::WorkStealingThreadPoolImpl::SetThrottled(
     bool throttled) {
-  return throttled_.exchange(throttled, std::memory_order_relaxed);
+  return throttled_.exchange(throttled);
 }
 
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::SetShutdown(
@@ -314,15 +313,15 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::SetForking(
 }
 
 bool WorkStealingThreadPool::WorkStealingThreadPoolImpl::IsForking() {
-  return forking_.load(std::memory_order_relaxed);
+  return forking_.load();
 }
 
 bool WorkStealingThreadPool::WorkStealingThreadPoolImpl::IsShutdown() {
-  return shutdown_.load(std::memory_order_relaxed);
+  return shutdown_.load();
 }
 
 bool WorkStealingThreadPool::WorkStealingThreadPoolImpl::IsQuiesced() {
-  return quiesced_.load(std::memory_order_relaxed);
+  return quiesced_.load();
 }
 
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::PrepareFork() {
@@ -414,13 +413,13 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Lifeguard::
     }
     MaybeStartNewThread();
   }
-  lifeguard_running_.store(false, std::memory_order_relaxed);
+  lifeguard_running_.store(false);
   lifeguard_is_shut_down_->Notify();
 }
 
 WorkStealingThreadPool::WorkStealingThreadPoolImpl::Lifeguard::~Lifeguard() {
   lifeguard_should_shut_down_->Notify();
-  while (lifeguard_running_.load(std::memory_order_relaxed)) {
+  while (lifeguard_running_.load()) {
     GRPC_LOG_EVERY_N_SEC_DELAYED(kBlockingQuiesceLogRateSeconds, GPR_DEBUG,
                                  "%s",
                                  "Waiting for lifeguard thread to shut down");
