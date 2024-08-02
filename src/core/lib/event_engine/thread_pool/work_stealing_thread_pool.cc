@@ -268,23 +268,31 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::StartThread() {
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Quiesce() {
   LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce";
   SetShutdown(true);
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce SetShutdown(true) done";
   // Wait until all threads have exited.
   // Note that if this is a threadpool thread then we won't exit this thread
   // until all other threads have exited, so we need to wait for just one thread
   // running instead of zero.
   bool is_threadpool_thread = g_local_queue != nullptr;
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce is_threadpool_thread is " << is_threadpool_thread;
   work_signal()->SignalAll();
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce work_signal()->SignalAll() called.";
   auto threads_were_shut_down = living_thread_count_.BlockUntilThreadCount(
       is_threadpool_thread ? 1 : 0, "shutting down",
       g_log_verbose_failures ? kBlockUntilThreadCountTimeout
                              : grpc_core::Duration::Infinity());
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce threads_were_shut_down is " << threads_were_shut_down;
   if (!threads_were_shut_down.ok() && g_log_verbose_failures) {
     DumpStacksAndCrash();
   }
   CHECK(queue_.Empty());
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce queue_ is empty.";
   quiesced_.store(true, std::memory_order_relaxed);
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce quiesced set to true";
   grpc_core::MutexLock lock(&lifeguard_ptr_mu_);
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce resetting lifeguard.";
   lifeguard_.reset();
+  LOG(INFO) << "WorkStealingThreadPoolImpl::Quiesce returning.";
 }
 
 bool WorkStealingThreadPool::WorkStealingThreadPoolImpl::SetThrottled(
