@@ -581,6 +581,7 @@ grpc_cc_library(
         "channel_arg_names",
         "channel_stack_builder",
         "config",
+        "debug_location",
         "exec_ctx",
         "gpr",
         "grpc_base",
@@ -661,6 +662,7 @@ grpc_cc_library(
         "channel_arg_names",
         "channel_stack_builder",
         "config",
+        "debug_location",
         "exec_ctx",
         "gpr",
         "grpc_alts_credentials",
@@ -885,6 +887,7 @@ grpc_cc_library(
     deps = [
         "channel_arg_names",
         "gpr_public_hdrs",
+        "debug_location",
     ],
 )
 
@@ -1361,6 +1364,7 @@ grpc_cc_library(
     ],
     visibility = ["@grpc:event_engine_base_hdrs"],
     deps = [
+        "debug_location",
         "channel_arg_names",
         "gpr",
     ],

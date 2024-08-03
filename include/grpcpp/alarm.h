@@ -81,7 +81,7 @@ class Alarm : private grpc::internal::GrpcLibrary {
   Alarm& operator=(const Alarm&) = delete;
 
   /// Alarms are movable.
-  Alarm(Alarm&& rhs) noexcept : alarm_(rhs.alarm_) { rhs.alarm_ = nullptr; }
+  Alarm(Alarm&& rhs) noexcept : grpc::internal::GrpcLibrary("Alarm"), alarm_(rhs.alarm_) { rhs.alarm_ = nullptr; }
   Alarm& operator=(Alarm&& rhs) noexcept {
     std::swap(alarm_, rhs.alarm_);
     return *this;

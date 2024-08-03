@@ -84,7 +84,7 @@ void RegisterSecurityFilters(CoreConfiguration::Builder* builder) {
 
 static void do_basic_init(void) {
   grpc_core::InitInternally = grpc_init;
-  grpc_core::ShutdownInternally = grpc_shutdown;
+  grpc_core::ShutdownInternally = grpc_shutdown1;
   grpc_core::IsInitializedInternally = []() {
     return grpc_is_initialized() != 0;
   };
@@ -146,6 +146,7 @@ void grpc_shutdown(void) {
   grpc_core::MutexLock lock(g_init_mu);
 
   if (--g_initializations == 0) {
+    GRPC_API_TRACE("grpc_shutdown(void) == 0", 0, ());
     grpc_core::ApplicationCallbackExecCtx* acec =
         grpc_core::ApplicationCallbackExecCtx::Get();
     if (!grpc_iomgr_is_any_background_poller_thread() &&
@@ -171,7 +172,14 @@ void grpc_shutdown(void) {
           grpc_core::Thread::Options().set_joinable(false).set_tracked(false));
       cleanup_thread.Start();
     }
+  } else {
+    GRPC_API_TRACE("grpc_shutdown(void) done:%d", 1, (g_initializations));
   }
+}
+
+void grpc_shutdown1(const char* loc) {
+  GRPC_API_TRACE("grpc_shutdown(void) %s", 1, (loc));
+  grpc_shutdown();
 }
 
 void grpc_shutdown_blocking(void) {

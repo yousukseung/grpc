@@ -19,7 +19,7 @@
 namespace grpc {
 
 ServerCredentials::ServerCredentials(grpc_server_credentials* creds)
-    : c_creds_(creds) {}
+    : grpc::internal::GrpcLibrary("ServerCredentials"), c_creds_(creds) {}
 
 ServerCredentials::~ServerCredentials() {
   grpc_server_credentials_release(c_creds_);

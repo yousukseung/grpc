@@ -21,15 +21,17 @@ namespace grpc_core {
 // grpc_shutdown from within core, but otherwise do the same thing.
 // Avoids a build dependency cycle between grpc and grpc_base (and friends).
 extern void (*InitInternally)();
-extern void (*ShutdownInternally)();
+extern void (*ShutdownInternally)(const char*);
 extern bool (*IsInitializedInternally)();
 
 class KeepsGrpcInitialized {
  public:
-  KeepsGrpcInitialized() { InitInternally(); }
-  ~KeepsGrpcInitialized() { ShutdownInternally(); }
+  explicit KeepsGrpcInitialized(const char* debug) : debug_(debug) { InitInternally(); }
+  ~KeepsGrpcInitialized() { ShutdownInternally(debug_); }
   KeepsGrpcInitialized(const KeepsGrpcInitialized&) = delete;
   KeepsGrpcInitialized& operator=(const KeepsGrpcInitialized&) = delete;
+ private:
+  const char* debug_;
 };
 
 }  // namespace grpc_core

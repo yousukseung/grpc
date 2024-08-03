@@ -24,7 +24,7 @@
 namespace grpc {
 
 ChannelCredentials::ChannelCredentials(grpc_channel_credentials* c_creds)
-    : c_creds_(c_creds) {}
+    : grpc::internal::GrpcLibrary("ChannelCredentials"), c_creds_(c_creds) {}
 
 ChannelCredentials::~ChannelCredentials() {
   grpc_channel_credentials_release(c_creds_);

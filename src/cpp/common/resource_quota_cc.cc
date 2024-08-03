@@ -25,10 +25,12 @@
 
 namespace grpc {
 
-ResourceQuota::ResourceQuota() : impl_(grpc_resource_quota_create(nullptr)) {}
+ResourceQuota::ResourceQuota() : grpc::internal::GrpcLibrary("ResourceQuota"),
+  impl_(grpc_resource_quota_create(nullptr)) {}
 
 ResourceQuota::ResourceQuota(const std::string& name)
-    : impl_(grpc_resource_quota_create(name.c_str())) {}
+    : grpc::internal::GrpcLibrary("ResourceQuota"),
+      impl_(grpc_resource_quota_create(name.c_str())) {}
 
 ResourceQuota::~ResourceQuota() { grpc_resource_quota_unref(impl_); }
 

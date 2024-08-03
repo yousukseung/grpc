@@ -234,7 +234,10 @@ grpc_cc_library(
     name = "init_internally",
     srcs = ["lib/surface/init_internally.cc"],
     hdrs = ["lib/surface/init_internally.h"],
-    deps = ["//:gpr_platform"],
+    deps = [
+        "//:gpr_platform",
+        "//:debug_location",
+    ],
 )
 
 grpc_cc_library(

@@ -51,7 +51,7 @@ Channel::Channel(
     std::vector<
         std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>>
         interceptor_creators)
-    : host_(host), c_channel_(channel) {
+    : internal::GrpcLibrary("Channel"), host_(host), c_channel_(channel) {
   interceptor_creators_ = std::move(interceptor_creators);
 }
 

@@ -248,7 +248,8 @@ class CompletionQueue : private grpc::internal::GrpcLibrary {
 
  protected:
   /// Private constructor of CompletionQueue only visible to friend classes
-  explicit CompletionQueue(const grpc_completion_queue_attributes& attributes) {
+  explicit CompletionQueue(const grpc_completion_queue_attributes& attributes)
+      : grpc::internal::GrpcLibrary("CompletionQueue") {
     cq_ = grpc_completion_queue_create(
         grpc_completion_queue_factory_lookup(&attributes), &attributes,
         nullptr);

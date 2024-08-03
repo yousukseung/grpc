@@ -94,6 +94,7 @@ class GcpObservability {
   // change in this restriction should go through a design review.
   class GcpObservabilityImpl : private internal::GrpcLibrary {
    public:
+    GcpObservabilityImpl() : internal::GrpcLibrary("GcpObservabilityImpl") {}
     ~GcpObservabilityImpl() override;
   };
   std::unique_ptr<GcpObservabilityImpl> impl_;

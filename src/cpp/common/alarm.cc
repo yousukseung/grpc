@@ -149,7 +149,7 @@ class AlarmImpl : public grpc::internal::CompletionQueueTag {
 };
 }  // namespace internal
 
-Alarm::Alarm() : alarm_(new internal::AlarmImpl()) {}
+Alarm::Alarm() : grpc::internal::GrpcLibrary("Alarm"), alarm_(new internal::AlarmImpl()) {}
 
 void Alarm::SetInternal(grpc::CompletionQueue* cq, gpr_timespec deadline,
                         void* tag) {

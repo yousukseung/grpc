@@ -37,7 +37,7 @@
 
 GrpcLibraryInitHolder::GrpcLibraryInitHolder() { grpc_init(); }
 
-GrpcLibraryInitHolder::~GrpcLibraryInitHolder() { grpc_shutdown(); }
+GrpcLibraryInitHolder::~GrpcLibraryInitHolder() { grpc_shutdown1(); }
 
 void* CFStreamHandle::Retain(void* info) {
   CFStreamHandle* handle = static_cast<CFStreamHandle*>(info);

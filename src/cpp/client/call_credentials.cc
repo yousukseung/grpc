@@ -23,7 +23,7 @@
 namespace grpc {
 
 CallCredentials::CallCredentials(grpc_call_credentials* c_creds)
-    : c_creds_(c_creds) {
+    : grpc::internal::GrpcLibrary("CallCredentials"), c_creds_(c_creds) {
   CHECK_NE(c_creds, nullptr);
 }
 

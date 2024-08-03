@@ -335,7 +335,7 @@ GrpcXdsTransportFactory::~GrpcXdsTransportFactory() {
   grpc_pollset_set_destroy(interested_parties_);
   // Calling grpc_shutdown to ensure gRPC does not shut down until the XdsClient
   // is destroyed.
-  ShutdownInternally();
+  ShutdownInternally("GrpcXdsTransportFactory");
 }
 
 OrphanablePtr<XdsTransportFactory::XdsTransport>

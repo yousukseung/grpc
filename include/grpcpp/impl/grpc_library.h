@@ -31,7 +31,7 @@ namespace internal {
 /// Classes that require gRPC to be initialized should inherit from this class.
 class GrpcLibrary {
  public:
-  explicit GrpcLibrary(bool call_grpc_init = true) : grpc_init_called_(false) {
+  explicit GrpcLibrary(const char* debug, bool call_grpc_init = true) : debug_(debug), grpc_init_called_(false) {
     if (call_grpc_init) {
       grpc_init();
       grpc_init_called_ = true;
@@ -39,11 +39,12 @@ class GrpcLibrary {
   }
   virtual ~GrpcLibrary() {
     if (grpc_init_called_) {
-      grpc_shutdown();
+      grpc_shutdown1(debug_);
     }
   }
 
  private:
+  const char* debug_;
   bool grpc_init_called_;
 };
 

@@ -133,6 +133,7 @@ class EnvironmentAutoDetectHelper
       std::shared_ptr<grpc_event_engine::experimental::EventEngine>
           event_engine)
       : InternallyRefCounted(/*trace=*/nullptr, /*initial_refcount=*/2),
+        grpc::internal::GrpcLibrary("EnvAutoDetectorHelper"),
         project_id_(std::move(project_id)),
         on_done_(std::move(on_done)),
         event_engine_(std::move(event_engine)) {

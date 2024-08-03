@@ -182,7 +182,7 @@ DirectoryReloaderCrlProvider::~DirectoryReloaderCrlProvider() {
     event_engine_->Cancel(refresh_handle_.value());
   }
   // Call here because we call grpc_init in the constructor
-  grpc_shutdown();
+  grpc_shutdown1("DirectoryReloaderCrlProvider");
 }
 
 void DirectoryReloaderCrlProvider::UpdateAndStartTimer() {

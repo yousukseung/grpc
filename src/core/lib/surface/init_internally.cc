@@ -19,7 +19,7 @@
 namespace grpc_core {
 
 void (*InitInternally)();
-void (*ShutdownInternally)();
+void (*ShutdownInternally)(const char*);
 bool (*IsInitializedInternally)();
 
 }  // namespace grpc_core

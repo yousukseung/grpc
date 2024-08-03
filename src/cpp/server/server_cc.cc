@@ -899,7 +899,7 @@ Server::Server(
         std::unique_ptr<grpc::experimental::ServerInterceptorFactoryInterface>>
         interceptor_creators,
     experimental::ServerMetricRecorder* server_metric_recorder)
-    : acceptors_(std::move(acceptors)),
+    : grpc::internal::GrpcLibrary("Server"), acceptors_(std::move(acceptors)),
       interceptor_creators_(std::move(interceptor_creators)),
       max_receive_message_size_(INT_MIN),
       sync_server_cqs_(std::move(sync_server_cqs)),

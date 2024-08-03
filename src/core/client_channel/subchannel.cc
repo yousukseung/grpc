@@ -573,7 +573,7 @@ Subchannel::~Subchannel() {
   connector_.reset();
   grpc_pollset_set_destroy(pollset_set_);
   // grpc_shutdown is called here because grpc_init is called in the ctor.
-  ShutdownInternally();
+  ShutdownInternally("Subchannel");
 }
 
 RefCountedPtr<Subchannel> Subchannel::Create(
