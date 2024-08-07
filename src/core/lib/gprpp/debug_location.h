@@ -59,7 +59,6 @@ class SourceLocation {
 // Used for tracking file and line where a call is made for debug builds.
 // No-op for non-debug builds.
 // Callers can use the DEBUG_LOCATION macro in either case.
-#ifndef NDEBUG
 class DebugLocation {
  public:
   DebugLocation(const char* file = GRPC_DEFAULT_FILE,
@@ -72,16 +71,6 @@ class DebugLocation {
  private:
   SourceLocation location_;
 };
-#else
-class DebugLocation {
- public:
-  DebugLocation() {}
-  explicit DebugLocation(SourceLocation) {}
-  DebugLocation(const char* /* file */, int /* line */) {}
-  const char* file() const { return nullptr; }
-  int line() const { return -1; }
-};
-#endif
 
 template <typename T>
 struct ValueWithDebugLocation {
