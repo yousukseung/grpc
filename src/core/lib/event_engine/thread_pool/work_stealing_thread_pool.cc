@@ -211,7 +211,10 @@ EventEngine::Closure* WorkStealingThreadPool::TheftRegistry::StealOne() {
   EventEngine::Closure* closure;
   for (auto* queue : queues_) {
     closure = queue->PopMostRecent();
-    if (closure != nullptr) return closure;
+    if (closure != nullptr) { 
+      LOG(INFO) << "WorkStealingThreadPoolImpl Work Stolen";
+      return closure;
+    }
   }
   return nullptr;
 }
