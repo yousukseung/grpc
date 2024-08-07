@@ -537,6 +537,7 @@ bool WorkStealingThreadPool::ThreadState::Step() {
   // * the steal pool returns nullptr
   bool should_run_again = false;
   auto start_time = std::chrono::steady_clock::now();
+  bool stolen = false;
   // Wait until work is available or until shut down.
   while (!pool_->IsForking()) {
     // Pull from the global queue next
@@ -552,6 +553,7 @@ bool WorkStealingThreadPool::ThreadState::Step() {
     closure = pool_->theft_registry()->StealOne();
     if (closure != nullptr) {
       should_run_again = true;
+      stolen = true;
       break;
     }
     // No closures were retrieved from anywhere.
@@ -576,7 +578,7 @@ bool WorkStealingThreadPool::ThreadState::Step() {
   if (closure != nullptr) {
     auto busy =
         pool_->busy_thread_count()->MakeAutoThreadCounter(busy_count_idx_);
-    closure->Run();
+    closure->Run(stolen);
   }
   backoff_.Reset();
   return should_run_again;
