@@ -428,35 +428,37 @@ void WorkSerializer::DispatchingWorkSerializer::Run(
 
 // Implementation of EventEngine::Closure::Run - our actual work loop
 void WorkSerializer::DispatchingWorkSerializer::Run() {
-  // TODO(ctiller): remove these when we can deprecate ExecCtx
-  ApplicationCallbackExecCtx app_exec_ctx;
-  ExecCtx exec_ctx;
-  // Grab the last element of processing_ - which is the next item in our
-  // queue since processing_ is stored in reverse order.
-  auto& cb = processing_.back();
-  if (GRPC_TRACE_FLAG_ENABLED(work_serializer)) {
-    gpr_log(GPR_INFO, "WorkSerializer[%p] Executing callback [%s:%d]", this,
-            cb.location.file(), cb.location.line());
+  {
+    // TODO(ctiller): remove these when we can deprecate ExecCtx
+    ApplicationCallbackExecCtx app_exec_ctx;
+    ExecCtx exec_ctx;
+    // Grab the last element of processing_ - which is the next item in our
+    // queue since processing_ is stored in reverse order.
+    auto& cb = processing_.back();
+    if (GRPC_TRACE_FLAG_ENABLED(work_serializer)) {
+      gpr_log(GPR_INFO, "WorkSerializer[%p] Executing callback [%s:%d]", this,
+              cb.location.file(), cb.location.line());
+    }
+    // Run the work item.
+    const auto start = std::chrono::steady_clock::now();
+    SetCurrentThread();
+    cb.callback();
+    // pop_back here destroys the callback - freeing any resources it might
+    // hold. We do so before clearing the current thread in case the callback
+    // destructor wants to check that it's in the WorkSerializer too.
+    processing_.pop_back();
+    ClearCurrentThread();
+    global_stats().IncrementWorkSerializerItemsDequeued();
+    const auto work_time = std::chrono::steady_clock::now() - start;
+    global_stats().IncrementWorkSerializerWorkTimePerItemMs(
+        std::chrono::duration_cast<std::chrono::milliseconds>(work_time).count());
+    time_running_items_ += work_time;
+    ++items_processed_during_run_;
+    // Check if we've drained the queue and if so refill it.
+    if (processing_.empty() && !Refill()) return;
+    // There's still work in processing_, so schedule ourselves again on
+    // EventEngine.
   }
-  // Run the work item.
-  const auto start = std::chrono::steady_clock::now();
-  SetCurrentThread();
-  cb.callback();
-  // pop_back here destroys the callback - freeing any resources it might
-  // hold. We do so before clearing the current thread in case the callback
-  // destructor wants to check that it's in the WorkSerializer too.
-  processing_.pop_back();
-  ClearCurrentThread();
-  global_stats().IncrementWorkSerializerItemsDequeued();
-  const auto work_time = std::chrono::steady_clock::now() - start;
-  global_stats().IncrementWorkSerializerWorkTimePerItemMs(
-      std::chrono::duration_cast<std::chrono::milliseconds>(work_time).count());
-  time_running_items_ += work_time;
-  ++items_processed_during_run_;
-  // Check if we've drained the queue and if so refill it.
-  if (processing_.empty() && !Refill()) return;
-  // There's still work in processing_, so schedule ourselves again on
-  // EventEngine.
   event_engine_->Run(this);
 }
 
