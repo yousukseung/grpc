@@ -370,6 +370,7 @@ class WorkSerializer::DispatchingWorkSerializer final
   bool running_ ABSL_GUARDED_BY(mu_) = false;
   bool orphaned_ ABSL_GUARDED_BY(mu_) = false;
   Mutex mu_;
+  Mutex mu2_;
   // Queued callbacks. New work items land here, and when processing_ is
   // drained we move this entire queue into processing_ and work on draining
   // it again. In low traffic scenarios this gives two mutex acquisitions per
@@ -428,6 +429,7 @@ void WorkSerializer::DispatchingWorkSerializer::Run(
 
 // Implementation of EventEngine::Closure::Run - our actual work loop
 void WorkSerializer::DispatchingWorkSerializer::Run() {
+  MutexLock lock(&mu2_);
   // TODO(ctiller): remove these when we can deprecate ExecCtx
   ApplicationCallbackExecCtx app_exec_ctx;
   ExecCtx exec_ctx;
