@@ -35,10 +35,11 @@ size_t BasicWorkQueue::Size() const {
   return q_.size();
 }
 
-EventEngine::Closure* BasicWorkQueue::PopMostRecent() {
+EventEngine::Closure* BasicWorkQueue::PopMostRecent(bool stealing) {
   grpc_core::MutexLock lock(&mu_);
   if (q_.empty()) return nullptr;
   auto tmp = q_.back();
+  if (stealing && !tmp->Stealable()) return nullptr;
   q_.pop_back();
   return tmp;
 }

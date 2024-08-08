@@ -53,9 +53,9 @@ namespace grpc_core {
 class WorkSerializer::WorkSerializerImpl : public Orphanable {
  public:
   virtual void Run(std::function<void()> callback,
-                   const DebugLocation& location) = 0;
+                   const DebugLocation& location, bool nosteal) = 0;
   virtual void Schedule(std::function<void()> callback,
-                        const DebugLocation& location) = 0;
+                        const DebugLocation& location, bool nosteal) = 0;
   virtual void DrainQueue() = 0;
 
 #ifndef NDEBUG
@@ -70,9 +70,9 @@ class WorkSerializer::WorkSerializerImpl : public Orphanable {
 class WorkSerializer::LegacyWorkSerializer final : public WorkSerializerImpl {
  public:
   void Run(std::function<void()> callback,
-           const DebugLocation& location) override;
+           const DebugLocation& location, bool nosteal) override;
   void Schedule(std::function<void()> callback,
-                const DebugLocation& location) override;
+                const DebugLocation& location, bool nosteal) override;
   void DrainQueue() override;
   void Orphan() override;
 
@@ -135,7 +135,7 @@ class WorkSerializer::LegacyWorkSerializer final : public WorkSerializerImpl {
 };
 
 void WorkSerializer::LegacyWorkSerializer::Run(std::function<void()> callback,
-                                               const DebugLocation& location) {
+                                               const DebugLocation& location, bool nosteal) {
   gpr_log(GPR_INFO, "WorkSerializer::Run() %p Scheduling callback [%s:%d]",
           this, location.file(), location.line());
   // Increment queue size for the new callback and owner count to attempt to
@@ -166,7 +166,7 @@ void WorkSerializer::LegacyWorkSerializer::Run(std::function<void()> callback,
 }
 
 void WorkSerializer::LegacyWorkSerializer::Schedule(
-    std::function<void()> callback, const DebugLocation& location) {
+    std::function<void()> callback, const DebugLocation& location, bool nosteal) {
   CallbackWrapper* cb_wrapper =
       new CallbackWrapper(std::move(callback), location);
   gpr_log(GPR_INFO,
@@ -279,15 +279,18 @@ class WorkSerializer::DispatchingWorkSerializer final
           event_engine)
       : event_engine_(std::move(event_engine)) {}
   void Run(std::function<void()> callback,
-           const DebugLocation& location) override;
+           const DebugLocation& location, bool nosteal) override;
   void Schedule(std::function<void()> callback,
-                const DebugLocation& location) override {
+                const DebugLocation& location, bool nosteal) override {
     // We always dispatch to event engine, so Schedule and Run share
     // semantics.
-    Run(callback, location);
+    Run(callback, location, nosteal);
   }
   void DrainQueue() override {}
   void Orphan() override;
+  bool Stealable() override {
+    return nosteal_.load() == 0;
+  }
 
   // Override EventEngine::Closure
   void Run() override { Run(false); }
@@ -302,11 +305,12 @@ class WorkSerializer::DispatchingWorkSerializer final
  private:
   // Wrapper to capture DebugLocation for the callback.
   struct CallbackWrapper {
-    CallbackWrapper(std::function<void()> cb, const DebugLocation& loc)
-        : callback(std::move(cb)), location(loc) {}
+    CallbackWrapper(std::function<void()> cb, const DebugLocation& loc, bool ns)
+        : callback(std::move(cb)), location(loc), nosteal(ns) {}
     std::function<void()> callback;
     // GPR_NO_UNIQUE_ADDRESS means this is 0 sized in release builds.
     GPR_NO_UNIQUE_ADDRESS DebugLocation location;
+    bool nosteal;
   };
   using CallbackVector = absl::InlinedVector<CallbackWrapper, 1>;
 
@@ -363,6 +367,7 @@ class WorkSerializer::DispatchingWorkSerializer final
   // work item, but as load increases we get some natural batching and the
   // rate of mutex acquisitions per work item tends towards 1.
   CallbackVector incoming_ ABSL_GUARDED_BY(mu_);
+  std::atomic<uint64_t> nosteal_{0};
 
 #ifndef NDEBUG
   static thread_local DispatchingWorkSerializer* running_work_serializer_;
@@ -389,7 +394,7 @@ void WorkSerializer::DispatchingWorkSerializer::Orphan() {
 
 // Implementation of WorkSerializerImpl::Run
 void WorkSerializer::DispatchingWorkSerializer::Run(
-    std::function<void()> callback, const DebugLocation& location) {
+    std::function<void()> callback, const DebugLocation& location, bool nosteal) {
   //gpr_log(GPR_INFO, "WorkSerializer[%p] Scheduling callback [%s:%d]", this, location.file(), location.line());
   global_stats().IncrementWorkSerializerItemsEnqueued();
   MutexLock lock(&mu_);
@@ -402,13 +407,15 @@ void WorkSerializer::DispatchingWorkSerializer::Run(
     time_running_items_ = std::chrono::steady_clock::duration();
     CHECK(processing_.empty());
     gpr_log(GPR_INFO, "WorkSerializer[%p] Scheduling callback immediately [%s:%d]", this, location.file(), location.line());
-    processing_.emplace_back(std::move(callback), location);
+    processing_.emplace_back(std::move(callback), location, false);
     event_engine_->Run(this);
-  } else {
-    gpr_log(GPR_INFO, "WorkSerializer[%p] Scheduling callback for later [%s:%d]", this, location.file(), location.line());
+  } else {    
+    gpr_log(GPR_INFO, "WorkSerializer[%p] Scheduling callback for later [%s:%d] %s", this, location.file(), location.line(),
+            (nosteal ? "NOSTEAL" : ""));
+    nosteal_++;
     // We are already running, so add this callback to the incoming_ list.
     // The work loop will eventually get to it.
-    incoming_.emplace_back(std::move(callback), location);
+    incoming_.emplace_back(std::move(callback), location, nosteal);
   }
 }
 
@@ -420,6 +427,9 @@ void WorkSerializer::DispatchingWorkSerializer::Run(bool stolen) {
   // Grab the last element of processing_ - which is the next item in our
   // queue since processing_ is stored in reverse order.
   auto& cb = processing_.back();
+  if (cb.nosteal) {
+    --nosteal_;
+  }
   gpr_log(GPR_INFO, "WorkSerializer[%p] Executing callback [%s:%d] %s", this,
           cb.location.file(), cb.location.line(), (stolen ? "STOLEN" : ""));
   // Run the work item.
@@ -514,13 +524,13 @@ WorkSerializer::WorkSerializer(
 WorkSerializer::~WorkSerializer() = default;
 
 void WorkSerializer::Run(std::function<void()> callback,
-                         const DebugLocation& location) {
-  impl_->Run(std::move(callback), location);
+                         const DebugLocation& location, bool nosteal) {
+  impl_->Run(std::move(callback), location, nosteal);
 }
 
 void WorkSerializer::Schedule(std::function<void()> callback,
-                              const DebugLocation& location) {
-  impl_->Schedule(std::move(callback), location);
+                              const DebugLocation& location, bool nosteal) {
+  impl_->Schedule(std::move(callback), location, nosteal);
 }
 
 void WorkSerializer::DrainQueue() { impl_->DrainQueue(); }
