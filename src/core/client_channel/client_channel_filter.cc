@@ -566,7 +566,7 @@ class ClientChannelFilter::SubchannelWrapper final
           }
           WeakUnref(DEBUG_LOCATION, "subchannel map cleanup");
         },
-        DEBUG_LOCATION);
+        DEBUG_LOCATION, /*nosteal=*/true);
   }
 
   void WatchConnectivityState(
