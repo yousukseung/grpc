@@ -207,12 +207,12 @@ void WorkStealingThreadPool::TheftRegistry::Unenroll(WorkQueue* queue) {
 }
 
 EventEngine::Closure* WorkStealingThreadPool::TheftRegistry::StealOne() {
-//  grpc_core::MutexLock lock(&mu_);
-//  EventEngine::Closure* closure;
-//  for (auto* queue : queues_) {
-//    closure = queue->PopMostRecent();
-//    if (closure != nullptr) return closure;
-//  }
+  grpc_core::MutexLock lock(&mu_);
+  EventEngine::Closure* closure;
+  for (auto* queue : queues_) {
+    closure = queue->PopMostRecent(true);
+    if (closure != nullptr) return closure;
+  }
   return nullptr;
 }
 
@@ -498,7 +498,7 @@ void WorkStealingThreadPool::ThreadState::ThreadBody() {
     // TODO(hork): consider WorkQueue::AddAll(WorkQueue*)
     EventEngine::Closure* closure;
     while (!g_local_queue->Empty()) {
-      closure = g_local_queue->PopMostRecent();
+      closure = g_local_queue->PopMostRecent(false);
       if (closure != nullptr) {
         pool_->queue()->Add(closure);
       }
@@ -522,7 +522,7 @@ void WorkStealingThreadPool::ThreadState::SleepIfRunning() {
 
 bool WorkStealingThreadPool::ThreadState::Step() {
   if (pool_->IsForking()) return false;
-  auto* closure = g_local_queue->PopMostRecent();
+  auto* closure = g_local_queue->PopMostRecent(false);
   // If local work is available, run it.
   if (closure != nullptr) {
     auto busy =
@@ -544,7 +544,7 @@ bool WorkStealingThreadPool::ThreadState::Step() {
     // TODO(hork): consider an empty check for performance wins. Depends on the
     // queue implementation, the BasicWorkQueue takes two locks when you do an
     // empty check then pop.
-    closure = pool_->queue()->PopMostRecent();
+    closure = pool_->queue()->PopMostRecent(false);
     if (closure != nullptr) {
       should_run_again = true;
       break;
@@ -592,14 +592,14 @@ void WorkStealingThreadPool::ThreadState::FinishDraining() {
   // threads will finish draining the global queue.
   while (!pool_->IsForking()) {
     if (!g_local_queue->Empty()) {
-      auto* closure = g_local_queue->PopMostRecent();
+      auto* closure = g_local_queue->PopMostRecent(false);
       if (closure != nullptr) {
         closure->Run();
       }
       continue;
     }
     if (!pool_->queue()->Empty()) {
-      auto* closure = pool_->queue()->PopMostRecent();
+      auto* closure = pool_->queue()->PopMostRecent(false);
       if (closure != nullptr) {
         closure->Run();
       }
