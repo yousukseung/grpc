@@ -80,11 +80,11 @@ class ABSL_LOCKABLE WorkSerializer {
   //         }, DEBUG_LOCATION);
   //   }
   //   void callback() ABSL_EXCLUSIVE_LOCKS_REQUIRED(work_serializer) { ... }
-  void Run(std::function<void()> callback, const DebugLocation& location);
+  void Run(std::function<void()> callback, const DebugLocation& location, bool nosteal = false);
 
   // Schedule \a callback to be run later when the queue of callbacks is
   // drained.
-  void Schedule(std::function<void()> callback, const DebugLocation& location);
+  void Schedule(std::function<void()> callback, const DebugLocation& location, bool nosteal = false);
   // Drains the queue of callbacks.
   void DrainQueue();
 

@@ -125,6 +125,7 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
     // Run the contained code.
     virtual void Run() = 0;
     virtual void Run(bool stolen) { Run(); }
+    virtual bool Stealable() { return true; }
   };
   /// Represents a scheduled task.
   ///
