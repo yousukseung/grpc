@@ -124,6 +124,7 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
     virtual ~Closure() = default;
     // Run the contained code.
     virtual void Run() = 0;
+    virtual bool Foo() { return true; }
   };
   /// Represents a scheduled task.
   ///

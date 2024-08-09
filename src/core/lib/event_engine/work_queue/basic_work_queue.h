@@ -46,7 +46,7 @@ class BasicWorkQueue : public WorkQueue {
   // elements from the queue.
   //
   // This method may return nullptr even if the queue is not empty.
-  EventEngine::Closure* PopMostRecent() override ABSL_LOCKS_EXCLUDED(mu_);
+  EventEngine::Closure* PopMostRecent(bool stealing) override ABSL_LOCKS_EXCLUDED(mu_);
   // Returns the most recent element from the queue, or nullptr if either empty
   // or the queue is under contention.
   // This is expected to be the slower of the two ways to retrieve closures from

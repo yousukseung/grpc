@@ -40,7 +40,7 @@ class WorkQueue {
   //
   // Implementations are permitted to return nullptr even if the queue is not
   // empty. This is to support potential optimizations.
-  virtual EventEngine::Closure* PopMostRecent() = 0;
+  virtual EventEngine::Closure* PopMostRecent(bool stealing) = 0;
   // Returns the most recent element from the queue, or nullptr if either empty
   // or the queue is under contention.
   // This is expected to be the slower of the two ways to retrieve closures from
