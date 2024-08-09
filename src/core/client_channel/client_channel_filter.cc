@@ -566,7 +566,7 @@ class ClientChannelFilter::SubchannelWrapper final
           }
           WeakUnref(DEBUG_LOCATION, "subchannel map cleanup");
         },
-        DEBUG_LOCATION);
+        DEBUG_LOCATION, /*nosteal=*/true);
   }
 
   void WatchConnectivityState(
@@ -666,7 +666,7 @@ class ClientChannelFilter::SubchannelWrapper final
             ApplyUpdateInControlPlaneWorkSerializer(state, status);
             Unref();
           },
-          DEBUG_LOCATION);
+          DEBUG_LOCATION, /*nosteal=*/true);
     }
 
     grpc_pollset_set* interested_parties() override {

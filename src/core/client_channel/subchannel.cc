@@ -465,7 +465,7 @@ void Subchannel::ConnectivityStateWatcherList::NotifyLocked(
           watcher_ptr->OnConnectivityStateChange(std::move(watcher), state,
                                                  status);
         },
-        DEBUG_LOCATION);
+        DEBUG_LOCATION, /*nosteal=*/true);
   }
 }
 
@@ -628,7 +628,7 @@ void Subchannel::WatchConnectivityState(
           watcher_ptr->OnConnectivityStateChange(std::move(watcher), state,
                                                  status);
         },
-        DEBUG_LOCATION);
+        DEBUG_LOCATION, /*nosteal=*/true);
     watcher_list_.AddWatcherLocked(std::move(watcher));
   }
   // Drain any connectivity state notifications after releasing the mutex.
