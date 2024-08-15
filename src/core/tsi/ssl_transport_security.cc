@@ -1241,6 +1241,8 @@ tsi_ssl_root_certs_store* tsi_ssl_root_certs_store_create(
     gpr_free(root_store);
     return nullptr;
   }
+  LOG(ERROR) << "X509_STORE allocated and ref'ed: " << root_store->store;
+  X509_STORE_up_ref(root_store->store);
   tsi_result result = x509_store_load_certs(root_store->store, pem_roots,
                                             strlen(pem_roots), nullptr);
   if (result != TSI_OK) {
@@ -2264,6 +2266,7 @@ tsi_result tsi_create_ssl_client_handshaker_factory_with_options(
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
     // X509_STORE_up_ref is only available since OpenSSL 1.1.
     if (options->root_store != nullptr) {
+      LOG(ERROR) << "X509_STORE ref'ed: " << options->root_store->store;
       X509_STORE_up_ref(options->root_store->store);
       SSL_CTX_set_cert_store(ssl_context, options->root_store->store);
     }
