@@ -618,6 +618,8 @@ void DefaultSslRootStore::InitRootStore() {
 void DefaultSslRootStore::InitRootStoreOnce() {
   default_pem_root_certs_ = ComputePemRootCerts();
   if (!GRPC_SLICE_IS_EMPTY(default_pem_root_certs_)) {
+    LOG(INFO) << "YSSEUNG default_pem_root_certs_ ref taken";
+    grpc_slice_ref(default_pem_root_certs_);
     default_root_store_ =
         tsi_ssl_root_certs_store_create(reinterpret_cast<const char*>(
             GRPC_SLICE_START_PTR(default_pem_root_certs_)));
