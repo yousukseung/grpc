@@ -71,6 +71,7 @@
 #include "src/core/lib/gprpp/crash.h"
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/manual_constructor.h"
+#include "src/core/lib/gprpp/notification.h"
 #include "src/core/lib/gprpp/status_helper.h"
 #include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/gprpp/unique_type_name.h"
@@ -1165,6 +1166,15 @@ ClientChannelFilter::~ClientChannelFilter() {
   // Stop backup polling.
   grpc_client_channel_stop_backup_polling(interested_parties_);
   grpc_pollset_set_destroy(interested_parties_);
+  if (IsWorkSerializerDispatchEnabled()) {
+    gpr_log(GPR_INFO, "Waiting until drained...");
+    auto w = std::make_shared<Notification>();
+    work_serializer_->Run([w]() {
+      w->Notify();
+    }, DEBUG_LOCATION);
+    gpr_log(GPR_INFO, "Done waiting until drained. notified: %d",
+              w->WaitForNotificationWithTimeout(absl::Seconds(2)));
+  }
 }
 
 OrphanablePtr<ClientChannelFilter::FilterBasedLoadBalancedCall>

@@ -3784,6 +3784,7 @@ grpc_cc_library(
         "//src/core:metadata",
         "//src/core:metadata_batch",
         "//src/core:metrics",
+        "//src/core:notification",
         "//src/core:observable",
         "//src/core:pipe",
         "//src/core:poll",
