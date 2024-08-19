@@ -158,7 +158,7 @@ LegacyChannel::LegacyChannel(bool is_client, std::string target,
       node->AddTraceEvent(channelz::ChannelTrace::Severity::Info,
                           grpc_slice_from_static_string("Channel destroyed"));
     }
-    ShutdownInternally();
+    ShutdownInternally("LegacyChannel");
   };
 }
 

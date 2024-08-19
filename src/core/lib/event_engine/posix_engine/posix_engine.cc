@@ -372,7 +372,8 @@ PosixEnginePollerManager::~PosixEnginePollerManager() {
 }
 
 PosixEventEngine::PosixEventEngine(std::shared_ptr<PosixEventPoller> poller)
-    : connection_shards_(std::max(2 * gpr_cpu_num_cores(), 1u)),
+    : grpc_core::KeepsGrpcInitialized("posix_ee"),
+      connection_shards_(std::max(2 * gpr_cpu_num_cores(), 1u)),
       executor_(MakeThreadPool(grpc_core::Clamp(gpr_cpu_num_cores(), 4u, 16u))),
       timer_manager_(std::make_shared<TimerManager>(executor_)) {
   g_timer_fork_manager->RegisterForkable(

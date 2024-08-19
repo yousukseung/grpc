@@ -84,7 +84,7 @@ void RegisterSecurityFilters(CoreConfiguration::Builder* builder) {
 
 static void do_basic_init(void) {
   grpc_core::InitInternally = grpc_init;
-  grpc_core::ShutdownInternally = grpc_shutdown;
+  grpc_core::ShutdownInternally = grpc_shutdown1;
   grpc_core::IsInitializedInternally = []() {
     return grpc_is_initialized() != 0;
   };
@@ -142,9 +142,13 @@ void grpc_shutdown_from_cleanup_thread(void* /*ignored*/) {
 }
 
 void grpc_shutdown(void) {
-  GRPC_API_TRACE("grpc_shutdown(void)", 0, ());
+  grpc_shutdown1("");
+}
+
+void grpc_shutdown1(const char* debug) {
+  GRPC_API_TRACE("grpc_shutdown(%s)", 1, (debug));
   grpc_core::MutexLock lock(g_init_mu);
-  LOG(INFO) << "grpc_shutdown(void) cnt:" << (g_initializations - 1);
+  LOG(INFO) << "grpc_shutdown( " << debug << ") cnt:" << (g_initializations - 1);
 
   if (--g_initializations == 0) {
     grpc_core::ApplicationCallbackExecCtx* acec =
@@ -157,14 +161,14 @@ void grpc_shutdown(void) {
              0) &&
         grpc_core::ExecCtx::Get() == nullptr) {
       // just run clean-up when this is called on non-executor thread.
-      LOG(INFO) << "grpc_shutdown starts clean-up now";
+      LOG(INFO) << "grpc_shutdown(" << debug << ") starts clean-up now";
       g_shutting_down = true;
       grpc_shutdown_internal_locked();
-      LOG(INFO) << "grpc_shutdown done";
+      LOG(INFO) << "grpc_shutdown(" << debug << ") done";
     } else {
       // spawn a detached thread to do the actual clean up in case we are
       // currently in an executor thread.
-      LOG(INFO) << "grpc_shutdown spawns clean-up thread";
+      LOG(INFO) << "grpc_shutdown(" << debug << ") spawns clean-up thread";
       g_initializations++;
       g_shutting_down = true;
       grpc_core::Thread cleanup_thread(
@@ -173,7 +177,7 @@ void grpc_shutdown(void) {
       cleanup_thread.Start();
     }
   }
-  LOG(INFO) << "grpc_shutdown(void) done.";
+  LOG(INFO) << "grpc_shutdown(" << debug << ") done.";
 }
 
 void grpc_shutdown_blocking(void) {

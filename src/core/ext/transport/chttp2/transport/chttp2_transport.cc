@@ -591,7 +591,7 @@ using grpc_event_engine::experimental::TcpTraceExtension;
 grpc_chttp2_transport::grpc_chttp2_transport(
     const grpc_core::ChannelArgs& channel_args, grpc_endpoint* ep,
     bool is_client)
-    : ep(ep),
+    : grpc_core::KeepsGrpcInitialized("chttp2_transport"), ep(ep),
       peer_string(
           grpc_core::Slice::FromCopiedString(grpc_endpoint_get_peer(ep))),
       memory_owner(channel_args.GetObject<grpc_core::ResourceQuota>()

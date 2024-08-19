@@ -401,7 +401,7 @@ class MetadataCredentialsPluginWrapper final : private internal::GrpcLibrary {
 
   explicit MetadataCredentialsPluginWrapper(
       std::unique_ptr<MetadataCredentialsPlugin> plugin)
-      : plugin_(std::move(plugin)) {
+      : internal::GrpcLibrary("MetadataCredsPluginWrapper"), plugin_(std::move(plugin)) {
     if (plugin_->IsBlocking()) {
       thread_pool_.reset(CreateDefaultThreadPool());
     }

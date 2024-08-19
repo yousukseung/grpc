@@ -69,6 +69,8 @@ GRPCAPI void grpc_init(void);
     have been destroyed. */
 GRPCAPI void grpc_shutdown(void);
 
+void grpc_shutdown1(const char*);
+
 /** EXPERIMENTAL. Returns 1 if the grpc library has been initialized.
     TODO(ericgribkoff) Decide if this should be promoted to non-experimental as
     part of stabilizing the fork support API, as tracked in
