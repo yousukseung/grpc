@@ -188,7 +188,7 @@ static void verified_root_cert_free(void* /*parent*/, void* ptr,
 
 static void init_openssl(void) {
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
-  OPENSSL_init_ssl(0, nullptr);
+  OPENSSL_init_ssl(OPENSSL_INIT_NO_ATEXIT, nullptr);
 #else
   SSL_library_init();
   SSL_load_error_strings();
