@@ -1910,7 +1910,7 @@ absl::optional<absl::Status> ClientChannelFilter::CallData::CheckResolution(
   // We have a result.  Apply service config to call.
   grpc_error_handle error = ApplyServiceConfigToCallLocked(config_selector);
   // ConfigSelector must be unreffed inside the WorkSerializer.
-  if (!IsWorkSerializerDispatchEnabled() && config_selector.ok()) {
+  if (/*!IsWorkSerializerDispatchEnabled() &&*/ config_selector.ok()) {
     chand()->work_serializer_->Run(
         [config_selector = std::move(*config_selector)]() mutable {
           config_selector.reset();
