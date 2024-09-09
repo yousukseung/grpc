@@ -18,6 +18,8 @@
 
 #include "src/core/lib/surface/init.h"
 
+#include <cstdlib>
+
 #include "absl/base/thread_annotations.h"
 #include "absl/log/log.h"
 
@@ -197,4 +199,19 @@ void grpc_maybe_wait_for_async_shutdown(void) {
   while (g_shutting_down) {
     g_shutting_down_cv->Wait(g_init_mu);
   }
+}
+
+void grpc_register_wait_for_async_shutdown(void) {
+  std::atexit([](){
+    grpc_core::MutexLock lock(g_init_mu);
+    LOG(INFO) << "YSSEUNG EXITHANDLER called. init:" << g_initializations;
+    if (g_initializations > 0) {
+      LOG(INFO) << "YSSEUNG EXITHANDLER not shutdown, waiting for 2s.";
+      bool timedout = g_shutting_down_cv->WaitWithTimeout(g_init_mu, absl::Seconds(2));
+      LOG(INFO) << "YSSEUNG EXITHANDLER done waiting. Timed out:" << timedout;
+    } else {
+      LOG(INFO) << "YSSEUNG EXITHANDLER already shutdown, not waiting.";
+    }
+  });
+  LOG(INFO) << "YSSEUNG exit handler registered";
 }

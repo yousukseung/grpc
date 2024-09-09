@@ -23,6 +23,7 @@
 
 #include <grpc/support/port_platform.h>
 
+#include "src/core/lib/surface/init.h"
 #include "src/core/tsi/transport_security_interface.h"
 
 // TODO(jboeuf): refactor inet_ntop into a portability header.
@@ -189,6 +190,7 @@ static void verified_root_cert_free(void* /*parent*/, void* ptr,
 static void init_openssl(void) {
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
   OPENSSL_init_ssl(0, nullptr);
+  grpc_register_wait_for_async_shutdown();
 #else
   SSL_library_init();
   SSL_load_error_strings();

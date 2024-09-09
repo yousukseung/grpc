@@ -21,5 +21,6 @@
 #include <grpc/support/port_platform.h>
 
 void grpc_maybe_wait_for_async_shutdown(void);
+void grpc_register_wait_for_async_shutdown(void);
 
 #endif  // GRPC_SRC_CORE_LIB_SURFACE_INIT_H
