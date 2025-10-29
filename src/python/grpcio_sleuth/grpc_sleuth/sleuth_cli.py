@@ -15,7 +15,9 @@
 """CLI entry point for gRPC Sleuth."""
 
 import sys
+
 from . import sleuth_lib
+
 
 def main():
     """Main function for the sleuth CLI."""
@@ -23,6 +25,6 @@ def main():
     exit_code = sleuth_lib.run_sleuth(sys.argv[1:])
     sys.exit(exit_code)
 
+
 if __name__ == "__main__":
     main()
-
